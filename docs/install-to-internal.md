@@ -5,8 +5,11 @@ clones a **running SD install** onto internal storage; `pocknix-uninstall-intern
 
 Both scripts live in the image at `/usr/local/bin/` (overlay), run **on the device**, and never touch
 `abl`/`xbl`/`modem`/`persist`/`super` — only Android's `userdata` (shrunk) plus the two pocknix
-partitions they add (`ROCKNIX` FAT boot + `POCKNIX_ROOT` ext4). For the exact boot-partition layout
-and *why* it must be what it is, see the `rp6-internal-boot` memory.
+partitions they add (`ROCKNIX` FAT boot + `POCKNIX_ROOT`). The internal root gets the same
+filesystem as the running SD: btrfs with the snapshot/rollback layout (see
+[snapshots.md](snapshots.md)) on current images, ext4 when installing from a pre-snapshot SD.
+For the exact boot-partition layout and *why* it must be what it is, see the
+`rp6-internal-boot` memory.
 
 > ⚠️ This repartitions the disk Android lives on. It shrinks `userdata` (wipes Android user data) but
 > leaves Android itself bootable. **Always `--dry-run` first and read the printed plan.**
