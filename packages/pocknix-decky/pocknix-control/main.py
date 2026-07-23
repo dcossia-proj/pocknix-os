@@ -3,6 +3,7 @@ import asyncio
 from pocknix_control.config import build_config
 from pocknix_control.modes import set_fan_mode, set_lavd_mode
 from pocknix_control.sdcard import detect_sdcard, format_sdcard
+from pocknix_control.snapshots import reboot_system, snapshot_status, start_rollback
 from pocknix_control.tweaks import save_tweaks
 from pocknix_control.updates import check_updates, start_update, update_status
 
@@ -38,3 +39,12 @@ class Plugin:
 
     async def update_status(self):
         return await asyncio.to_thread(update_status)
+
+    async def snapshot_status(self):
+        return await asyncio.to_thread(snapshot_status)
+
+    async def start_rollback(self, snapshot_id):
+        return await asyncio.to_thread(start_rollback, snapshot_id)
+
+    async def reboot_system(self):
+        return await asyncio.to_thread(reboot_system)

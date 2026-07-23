@@ -7,19 +7,22 @@
 pkgname=pocknix-snapshots
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="pocknix pre-update btrfs snapshots, rollback (subvolume set-default) and non-interactive updater"
+pkgdesc="pocknix pre-update btrfs snapshots and rollback (subvolume set-default)"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
 license=('GPL2')
 depends=('btrfs-progs' 'jq' 'util-linux')
 backup=('etc/pocknix/snapshots.conf')
+# NB: no updater ships here — the QAM update path is Pocknix Control's transient
+# unit (pocknix-decky updates.py) and the desktop path is overlay pocknix-update;
+# both get snapshots for free because the hooks live in alpm.
 source=('05-pocknix-snapshot.hook' '99-pocknix-snapshot-post.hook'
         'snapshot-lib.sh'
         'pocknix-snapshot-pre' 'pocknix-snapshot-post'
-        'pocknix-snapshots' 'pocknix-rollback' 'pocknix-apply-update'
+        'pocknix-snapshots' 'pocknix-rollback'
         'pocknix-rollback-repair' 'pocknix-rollback-repair.service'
         'snapshots.conf' '50-pocknix-snapshots.rules')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm644 "${srcdir}/05-pocknix-snapshot.hook" \
@@ -31,7 +34,7 @@ package() {
 
   local bin
   for bin in pocknix-snapshot-pre pocknix-snapshot-post pocknix-snapshots \
-             pocknix-rollback pocknix-apply-update pocknix-rollback-repair; do
+             pocknix-rollback pocknix-rollback-repair; do
     install -Dm755 "${srcdir}/${bin}" "${pkgdir}/usr/bin/${bin}"
   done
 

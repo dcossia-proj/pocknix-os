@@ -55,6 +55,26 @@ export interface UpdateStatus {
   exitCode: number | null;
 }
 
+export interface SnapshotInfo {
+  id: string;
+  created: string;
+  ok: boolean;
+  /** true when that transaction included a kernel (rollback restores /flash boot files too) */
+  kernel: boolean;
+  targets: string;
+}
+
+export interface SnapshotStatus {
+  supported: boolean;
+  freeBytes: number;
+  totalBytes: number;
+  lowSpace: boolean;
+  rebootRequired: boolean;
+  rolledBack: { fromSnapshot: string; ts: string } | null;
+  /** oldest -> newest; "roll back last update" targets the last entry */
+  snapshots: SnapshotInfo[];
+}
+
 export interface SdcardInfo {
   present: boolean;
   device?: string;

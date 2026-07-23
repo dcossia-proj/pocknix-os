@@ -1,18 +1,25 @@
 import { ButtonItem, ConfirmModal, Field, PanelSection, PanelSectionRow, showModal } from "@decky/ui";
 import { useEffect, useRef, useState } from "react";
-import { checkUpdates, startUpdate, updateStatus } from "../backend";
-import type { UpdateInfo, UpdateStatus } from "../types";
+import { checkUpdates, rebootSystem, snapshotStatus, startRollback, startUpdate, updateStatus } from "../backend";
+import type { SnapshotStatus, UpdateInfo, UpdateStatus } from "../types";
 
 const SHOWN_UPDATES = 8;
+
+const gib = (bytes: number) => (bytes / 1024 ** 3).toFixed(1);
 
 export function Updater() {
   const [updates, setUpdates] = useState<UpdateInfo[] | null>(null);
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const [snap, setSnap] = useState<SnapshotStatus | null>(null);
+  const [rollingBack, setRollingBack] = useState(false);
+  const [rollbackDone, setRollbackDone] = useState(false);
   const [error, setError] = useState("");
   const busyRef = useRef(false);
   const running = !!status?.running;
-  busyRef.current = checking || running;
+  busyRef.current = checking || running || rollingBack;
+
+  const refreshSnap = () => snapshotStatus().then(setSnap).catch(() => {});
 
   // Re-attach to an update that survived a QAM close (or a Steam restart).
   useEffect(() => {
@@ -22,6 +29,7 @@ export function Updater() {
         if (!cancelled && (next.running || next.exitCode !== null)) setStatus(next);
       })
       .catch(() => {});
+    refreshSnap();
     return () => {
       cancelled = true;
     };
@@ -33,7 +41,10 @@ export function Updater() {
       try {
         const next = await updateStatus();
         setStatus(next);
-        if (!next.running && next.exitCode === 0) setUpdates([]);
+        if (!next.running) {
+          if (next.exitCode === 0) setUpdates([]);
+          refreshSnap(); // a finished transaction changes snapshots + reboot-required
+        }
       } catch (err) {
         setError(String(err));
       }
@@ -73,6 +84,40 @@ export function Updater() {
       />
     );
 
+  const lastSnapshot = snap?.supported && snap.snapshots.length > 0 ? snap.snapshots[snap.snapshots.length - 1] : null;
+
+  const rollBack = async () => {
+    if (busyRef.current || !lastSnapshot) return;
+    setError("");
+    setRollingBack(true);
+    try {
+      setSnap(await startRollback(lastSnapshot.id));
+      setRollbackDone(true);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setRollingBack(false);
+    }
+  };
+  const confirmRollback = () => {
+    if (!lastSnapshot) return;
+    showModal(
+      <ConfirmModal
+        strTitle="Roll Back Last Update"
+        strDescription={
+          `Restores the system to before the update of ${lastSnapshot.created}` +
+          (lastSnapshot.targets ? ` (${lastSnapshot.targets})` : "") +
+          `. Games, saves and settings are kept.` +
+          (lastSnapshot.kernel ? " The previous kernel is restored too." : "") +
+          ` Reboot after it completes.`
+        }
+        strOKButtonText="Roll Back"
+        onOK={rollBack}
+      />
+    );
+  };
+  const reboot = () => rebootSystem().catch((err) => setError(String(err)));
+
   const finished = !running && status?.exitCode !== null && status?.exitCode !== undefined;
   const summary = updates === null
     ? "Not checked yet"
@@ -81,37 +126,77 @@ export function Updater() {
       : `${updates.length} update${updates.length === 1 ? "" : "s"} available`;
 
   return (
-    <PanelSection title="SYSTEM UPDATES">
-      {!running ? <Field label="Status" description={summary} /> : null}
-      {!running && updates && updates.length > 0 ? (
-        <div className="pocknix-note">
-          {updates.slice(0, SHOWN_UPDATES).map((update) => (
-            <div key={update.name}>{`${update.name} ${update.current} → ${update.latest}`}</div>
-          ))}
-          {updates.length > SHOWN_UPDATES ? <div>{`… and ${updates.length - SHOWN_UPDATES} more`}</div> : null}
-        </div>
-      ) : null}
-      <PanelSectionRow>
-        <ButtonItem layout="below" disabled={checking || running} onClick={check}>
-          {checking ? "Checking…" : "Check for Updates"}
-        </ButtonItem>
-      </PanelSectionRow>
-      {!running && updates && updates.length > 0 ? (
+    <>
+      <PanelSection title="SYSTEM UPDATES">
+        {!running ? <Field label="Status" description={summary} /> : null}
+        {!running && updates && updates.length > 0 ? (
+          <div className="pocknix-note">
+            {updates.slice(0, SHOWN_UPDATES).map((update) => (
+              <div key={update.name}>{`${update.name} ${update.current} → ${update.latest}`}</div>
+            ))}
+            {updates.length > SHOWN_UPDATES ? <div>{`… and ${updates.length - SHOWN_UPDATES} more`}</div> : null}
+          </div>
+        ) : null}
         <PanelSectionRow>
-          <ButtonItem layout="below" onClick={confirmStart}>Install Updates</ButtonItem>
+          <ButtonItem layout="below" disabled={busyRef.current} onClick={check}>
+            {checking ? "Checking…" : "Check for Updates"}
+          </ButtonItem>
         </PanelSectionRow>
+        {!running && updates && updates.length > 0 ? (
+          <PanelSectionRow>
+            <ButtonItem layout="below" disabled={busyRef.current} onClick={confirmStart}>Install Updates</ButtonItem>
+          </PanelSectionRow>
+        ) : null}
+        {running ? <Field label="Updating…" description="Safe to close this menu. Do not power off." /> : null}
+        {finished ? (
+          <Field
+            label={status!.exitCode === 0 ? "Update complete" : `Update failed (code ${status!.exitCode})`}
+            description={status!.exitCode === 0 ? "Restart to finish applying updates." : "See the log below."}
+          />
+        ) : null}
+        {finished && status!.exitCode === 0 ? (
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={reboot}>Restart Now</ButtonItem>
+          </PanelSectionRow>
+        ) : null}
+        {(running || (finished && status!.exitCode !== 0)) && status?.log ? (
+          <div className="pocknix-note pocknix-log">{status.log}</div>
+        ) : null}
+        {error ? <Field label="Error" description={error} /> : null}
+      </PanelSection>
+      {snap?.supported ? (
+        <PanelSection title="ROLLBACK">
+          {snap.rolledBack && !rollbackDone ? (
+            <Field
+              label="System was rolled back"
+              description={`Restored from snapshot ${snap.rolledBack.fromSnapshot} (${snap.rolledBack.ts}). The next update clears this notice.`}
+            />
+          ) : null}
+          {rollbackDone ? (
+            <>
+              <Field label="Rolled back" description="Reboot to finish switching to the restored system." />
+              <PanelSectionRow>
+                <ButtonItem layout="below" onClick={reboot}>Reboot Now</ButtonItem>
+              </PanelSectionRow>
+            </>
+          ) : lastSnapshot ? (
+            <>
+              <Field label="Last snapshot" description={`${lastSnapshot.created}${lastSnapshot.targets ? ` — ${lastSnapshot.targets}` : ""}`} />
+              <PanelSectionRow>
+                <ButtonItem layout="below" disabled={busyRef.current} onClick={confirmRollback}>
+                  {rollingBack ? "Rolling back…" : "Roll Back Last Update"}
+                </ButtonItem>
+              </PanelSectionRow>
+            </>
+          ) : (
+            <Field label="No snapshots yet" description="A snapshot is taken automatically before every update." />
+          )}
+          <Field
+            label="Storage"
+            description={`${gib(snap.freeBytes)} GB free${snap.lowSpace ? " — LOW: snapshots may be skipped" : ""}`}
+          />
+        </PanelSection>
       ) : null}
-      {running ? <Field label="Updating…" description="Safe to close this menu. Do not power off." /> : null}
-      {finished ? (
-        <Field
-          label={status!.exitCode === 0 ? "Update complete" : `Update failed (code ${status!.exitCode})`}
-          description={status!.exitCode === 0 ? "Restart to finish applying updates." : "See the log below."}
-        />
-      ) : null}
-      {(running || (finished && status!.exitCode !== 0)) && status?.log ? (
-        <div className="pocknix-note pocknix-log">{status.log}</div>
-      ) : null}
-      {error ? <Field label="Error" description={error} /> : null}
-    </PanelSection>
+    </>
   );
 }

@@ -33,6 +33,9 @@ const formatSdcard = (label) => call("format_sdcard", label);
 const checkUpdates = () => call("check_updates");
 const startUpdate = () => call("start_update");
 const updateStatus = () => call("update_status");
+const snapshotStatus = () => call("snapshot_status");
+const startRollback = (id) => call("start_rollback", id);
+const rebootSystem = () => call("reboot_system");
 
 function useDebouncedSave(options) {
     const { config, field, snapshot, save, setConfig, onError, delay = 900 } = options;
@@ -470,14 +473,19 @@ function Storage() {
 }
 
 const SHOWN_UPDATES = 8;
+const gib = (bytes) => (bytes / 1024 ** 3).toFixed(1);
 function Updater() {
     const [updates, setUpdates] = SP_REACT.useState(null);
     const [checking, setChecking] = SP_REACT.useState(false);
     const [status, setStatus] = SP_REACT.useState(null);
+    const [snap, setSnap] = SP_REACT.useState(null);
+    const [rollingBack, setRollingBack] = SP_REACT.useState(false);
+    const [rollbackDone, setRollbackDone] = SP_REACT.useState(false);
     const [error, setError] = SP_REACT.useState("");
     const busyRef = SP_REACT.useRef(false);
     const running = !!status?.running;
-    busyRef.current = checking || running;
+    busyRef.current = checking || running || rollingBack;
+    const refreshSnap = () => snapshotStatus().then(setSnap).catch(() => { });
     // Re-attach to an update that survived a QAM close (or a Steam restart).
     SP_REACT.useEffect(() => {
         let cancelled = false;
@@ -487,6 +495,7 @@ function Updater() {
                 setStatus(next);
         })
             .catch(() => { });
+        refreshSnap();
         return () => {
             cancelled = true;
         };
@@ -498,8 +507,11 @@ function Updater() {
             try {
                 const next = await updateStatus();
                 setStatus(next);
-                if (!next.running && next.exitCode === 0)
-                    setUpdates([]);
+                if (!next.running) {
+                    if (next.exitCode === 0)
+                        setUpdates([]);
+                    refreshSnap(); // a finished transaction changes snapshots + reboot-required
+                }
             }
             catch (err) {
                 setError(String(err));
@@ -534,13 +546,40 @@ function Updater() {
         }
     };
     const confirmStart = () => DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: "Install Updates", strDescription: "Downloads and installs all available system updates. Keep the device powered; a running game may stutter. Restart after it finishes.", strOKButtonText: "Install", onOK: start }));
+    const lastSnapshot = snap?.supported && snap.snapshots.length > 0 ? snap.snapshots[snap.snapshots.length - 1] : null;
+    const rollBack = async () => {
+        if (busyRef.current || !lastSnapshot)
+            return;
+        setError("");
+        setRollingBack(true);
+        try {
+            setSnap(await startRollback(lastSnapshot.id));
+            setRollbackDone(true);
+        }
+        catch (err) {
+            setError(String(err));
+        }
+        finally {
+            setRollingBack(false);
+        }
+    };
+    const confirmRollback = () => {
+        if (!lastSnapshot)
+            return;
+        DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: "Roll Back Last Update", strDescription: `Restores the system to before the update of ${lastSnapshot.created}` +
+                (lastSnapshot.targets ? ` (${lastSnapshot.targets})` : "") +
+                `. Games, saves and settings are kept.` +
+                (lastSnapshot.kernel ? " The previous kernel is restored too." : "") +
+                ` Reboot after it completes.`, strOKButtonText: "Roll Back", onOK: rollBack }));
+    };
+    const reboot = () => rebootSystem().catch((err) => setError(String(err)));
     const finished = !running && status?.exitCode !== null && status?.exitCode !== undefined;
     const summary = updates === null
         ? "Not checked yet"
         : updates.length === 0
             ? "System is up to date"
             : `${updates.length} update${updates.length === 1 ? "" : "s"} available`;
-    return (SP_JSX.jsxs(DFL.PanelSection, { title: "SYSTEM UPDATES", children: [!running ? SP_JSX.jsx(DFL.Field, { label: "Status", description: summary }) : null, !running && updates && updates.length > 0 ? (SP_JSX.jsxs("div", { className: "pocknix-note", children: [updates.slice(0, SHOWN_UPDATES).map((update) => (SP_JSX.jsx("div", { children: `${update.name} ${update.current} → ${update.latest}` }, update.name))), updates.length > SHOWN_UPDATES ? SP_JSX.jsx("div", { children: `… and ${updates.length - SHOWN_UPDATES} more` }) : null] })) : null, SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: checking || running, onClick: check, children: checking ? "Checking…" : "Check for Updates" }) }), !running && updates && updates.length > 0 ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: confirmStart, children: "Install Updates" }) })) : null, running ? SP_JSX.jsx(DFL.Field, { label: "Updating\u2026", description: "Safe to close this menu. Do not power off." }) : null, finished ? (SP_JSX.jsx(DFL.Field, { label: status.exitCode === 0 ? "Update complete" : `Update failed (code ${status.exitCode})`, description: status.exitCode === 0 ? "Restart to finish applying updates." : "See the log below." })) : null, (running || (finished && status.exitCode !== 0)) && status?.log ? (SP_JSX.jsx("div", { className: "pocknix-note pocknix-log", children: status.log })) : null, error ? SP_JSX.jsx(DFL.Field, { label: "Error", description: error }) : null] }));
+    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "SYSTEM UPDATES", children: [!running ? SP_JSX.jsx(DFL.Field, { label: "Status", description: summary }) : null, !running && updates && updates.length > 0 ? (SP_JSX.jsxs("div", { className: "pocknix-note", children: [updates.slice(0, SHOWN_UPDATES).map((update) => (SP_JSX.jsx("div", { children: `${update.name} ${update.current} → ${update.latest}` }, update.name))), updates.length > SHOWN_UPDATES ? SP_JSX.jsx("div", { children: `… and ${updates.length - SHOWN_UPDATES} more` }) : null] })) : null, SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busyRef.current, onClick: check, children: checking ? "Checking…" : "Check for Updates" }) }), !running && updates && updates.length > 0 ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busyRef.current, onClick: confirmStart, children: "Install Updates" }) })) : null, running ? SP_JSX.jsx(DFL.Field, { label: "Updating\u2026", description: "Safe to close this menu. Do not power off." }) : null, finished ? (SP_JSX.jsx(DFL.Field, { label: status.exitCode === 0 ? "Update complete" : `Update failed (code ${status.exitCode})`, description: status.exitCode === 0 ? "Restart to finish applying updates." : "See the log below." })) : null, finished && status.exitCode === 0 ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: reboot, children: "Restart Now" }) })) : null, (running || (finished && status.exitCode !== 0)) && status?.log ? (SP_JSX.jsx("div", { className: "pocknix-note pocknix-log", children: status.log })) : null, error ? SP_JSX.jsx(DFL.Field, { label: "Error", description: error }) : null] }), snap?.supported ? (SP_JSX.jsxs(DFL.PanelSection, { title: "ROLLBACK", children: [snap.rolledBack && !rollbackDone ? (SP_JSX.jsx(DFL.Field, { label: "System was rolled back", description: `Restored from snapshot ${snap.rolledBack.fromSnapshot} (${snap.rolledBack.ts}). The next update clears this notice.` })) : null, rollbackDone ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.Field, { label: "Rolled back", description: "Reboot to finish switching to the restored system." }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: reboot, children: "Reboot Now" }) })] })) : lastSnapshot ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.Field, { label: "Last snapshot", description: `${lastSnapshot.created}${lastSnapshot.targets ? ` — ${lastSnapshot.targets}` : ""}` }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busyRef.current, onClick: confirmRollback, children: rollingBack ? "Rolling back…" : "Roll Back Last Update" }) })] })) : (SP_JSX.jsx(DFL.Field, { label: "No snapshots yet", description: "A snapshot is taken automatically before every update." })), SP_JSX.jsx(DFL.Field, { label: "Storage", description: `${gib(snap.freeBytes)} GB free${snap.lowSpace ? " — LOW: snapshots may be skipped" : ""}` })] })) : null] }));
 }
 
 function Content() {

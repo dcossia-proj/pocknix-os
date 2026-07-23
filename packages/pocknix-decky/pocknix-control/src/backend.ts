@@ -1,5 +1,5 @@
 import { call } from "@decky/api";
-import type { Config, SdcardInfo, Tweaks, UpdateInfo, UpdateStatus } from "./types";
+import type { Config, SdcardInfo, SnapshotStatus, Tweaks, UpdateInfo, UpdateStatus } from "./types";
 
 export const getConfig = () => call<[], Config>("get_config");
 export const setFanMode = (mode: string) => call<[string], Config>("set_fan_mode", mode);
@@ -10,3 +10,6 @@ export const formatSdcard = (label: string) => call<[string], SdcardInfo>("forma
 export const checkUpdates = () => call<[], UpdateInfo[]>("check_updates");
 export const startUpdate = () => call<[], UpdateStatus>("start_update");
 export const updateStatus = () => call<[], UpdateStatus>("update_status");
+export const snapshotStatus = () => call<[], SnapshotStatus>("snapshot_status");
+export const startRollback = (id: string) => call<[string], SnapshotStatus>("start_rollback", id);
+export const rebootSystem = () => call<[], boolean>("reboot_system");
