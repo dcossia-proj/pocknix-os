@@ -4,7 +4,7 @@
 # BOOTLOADER style so the device's existing (ROCKNIX-flashed) ABL boots it:
 #
 #   GPT  p1  fat32  name "${SD_BOOT_PARTNAME}" (label ${SD_FAT_LABEL})  -> /KERNEL [+ GRUB]
-#        p2  ext4   name "${ROOT_LABEL}"                                -> Arch base rootfs
+#        p2  btrfs  name "${ROOT_LABEL}"                                -> Arch base rootfs
 #
 # qcom-abl (sm8550): ABL loads /KERNEL (Android boot image, cmdline baked in).
 # arm-efi  (sm8250): the factory ABL chainloads /EFI/BOOT/bootaa64.efi ->
@@ -12,8 +12,14 @@
 #   /boot/grub/<board>.dtb"; the FAT additionally carries EFI/ and boot/grub/
 #   (cfg + grubenv + dtbs). ROCKNIX sets legacy_boot on p1 for BOTH styles (no esp flag).
 # Either way our kernel mounts its root directly by PARTUUID (fixed SD GUIDs; no
-# initramfs — UFS/ext4 are built in). ROCKNIX also puts a SYSTEM squashfs on
-# the FAT; we don't need it (plain ext4 root).
+# initramfs — UFS/btrfs are built in). ROCKNIX also puts a SYSTEM squashfs on
+# the FAT; we don't need it.
+#
+# The root is btrfs with subvolumes (@ / @home / @snapshots / @pacman-cache /
+# @var-log). The OS boots the filesystem's DEFAULT subvolume — neither the
+# kernel cmdline nor the fstab root line names a subvol — so rollback is
+# `btrfs subvolume set-default <other-root> + reboot` with zero boot-config
+# changes on either bootloader style (pocknix-snapshots package).
 #
 # Prereqs: `sudo make build` (rootfs) + `make kernel` (KERNEL). Run as root (loop+mount).
 # Flash:   sudo dd if=build/image/<soc>/pocknix-<soc>-sd.img of=/dev/sdX bs=4M conv=fsync status=progress
@@ -21,7 +27,7 @@
 source "$(dirname "$0")/lib.sh"
 need_linux
 need_root sd-image
-for t in parted sgdisk mkfs.vfat mkfs.ext4 losetup rsync chroot truncate du; do need_tool "$t"; done   # sgdisk: gptfdisk pkg
+for t in parted sgdisk mkfs.vfat mkfs.btrfs btrfs losetup rsync chroot truncate du; do need_tool "$t"; done   # sgdisk: gptfdisk pkg
 
 KERNEL_IMG="${IMAGE_DIR}/KERNEL"
 KOUT="${KERNEL_BUILD_DIR}/out"   # per-SoC (set in lib.sh)
@@ -32,7 +38,8 @@ OUT="${IMAGE_DIR}/pocknix-${SOC}-sd.img"   # one image per SoC family -> name it
 
 LOOP=""; MNT=""
 cleanup() {
-  [ -n "${MNT}" ] && mountpoint -q "${MNT}" && umount "${MNT}" 2>/dev/null || true
+  # -R: the root mount carries the subvol mounts (@home etc.) beneath it
+  [ -n "${MNT}" ] && mountpoint -q "${MNT}" && umount -R "${MNT}" 2>/dev/null || true
   [ -n "${MNT}" ] && rmdir "${MNT}" 2>/dev/null || true
   [ -n "${LOOP}" ] && losetup -d "${LOOP}" 2>/dev/null || true
 }
@@ -81,8 +88,15 @@ firstboot_config() {
   cat > "${root}/etc/fstab" <<EOF
 # pocknix-os test image
 # noatime: no software here needs atime; dropping atime write-backs cuts flash writes (SteamOS/ROCKNIX do the same).
-PARTUUID=${SD_ROOT_PARTUUID}  /       ext4  rw,noatime         0 1
-PARTUUID=${SD_BOOT_PARTUUID}  /flash  vfat  rw,noatime,nofail  0 2
+# The root line names NO subvol on purpose: the kernel mounts the btrfs DEFAULT
+# subvolume, which is how pocknix-rollback switches roots without touching boot
+# config. The other subvols are toplevel-relative, unaffected by set-default.
+PARTUUID=${SD_ROOT_PARTUUID}  /                  btrfs  rw,noatime,compress=zstd:3                       0 0
+PARTUUID=${SD_ROOT_PARTUUID}  /home              btrfs  rw,noatime,compress=zstd:3,subvol=@home          0 0
+PARTUUID=${SD_ROOT_PARTUUID}  /.snapshots        btrfs  rw,noatime,compress=zstd:3,subvol=@snapshots     0 0
+PARTUUID=${SD_ROOT_PARTUUID}  /var/cache/pacman  btrfs  rw,noatime,compress=zstd:3,subvol=@pacman-cache  0 0
+PARTUUID=${SD_ROOT_PARTUUID}  /var/log           btrfs  rw,noatime,compress=zstd:3,subvol=@var-log       0 0
+PARTUUID=${SD_BOOT_PARTUUID}  /flash             vfat   rw,noatime,nofail                                0 2
 EOF
   echo "pocknix" > "${root}/etc/hostname"
   # Default timezone: the ALARM base ships NO /etc/localtime, so libc (and thus the SteamOS/Plasma
@@ -281,10 +295,10 @@ main() {
   rm -f "${OUT}"
   truncate -s "${img_mib}M" "${OUT}"
 
-  log "partitioning (GPT: ${SD_BOOT_PARTNAME} fat32 + ${ROOT_LABEL} ext4)"
+  log "partitioning (GPT: ${SD_BOOT_PARTNAME} fat32 + ${ROOT_LABEL} btrfs)"
   parted -s "${OUT}" mklabel gpt
   parted -s "${OUT}" mkpart "${SD_BOOT_PARTNAME}" fat32 1MiB "${boot_end}MiB"
-  parted -s "${OUT}" mkpart "${ROOT_LABEL}"        ext4  "${boot_end}MiB" 100%
+  parted -s "${OUT}" mkpart "${ROOT_LABEL}"        btrfs "${boot_end}MiB" 100%
   parted -s "${OUT}" set 1 legacy_boot on
   # Deterministic partition GUIDs (see SD_*_PARTUUID in config/pocknix.conf):
   # the arm-efi grub.cfg and the fstab below pin these, so an internal install's
@@ -298,7 +312,7 @@ main() {
   [ -e "${LOOP}p1" ] && [ -e "${LOOP}p2" ] || die "loop partitions ${LOOP}p1/p2 did not appear"
 
   mkfs.vfat -F 32 -n "${SD_FAT_LABEL}" "${LOOP}p1" >/dev/null
-  mkfs.ext4 -F -q -L "${ROOT_LABEL}" "${LOOP}p2"
+  mkfs.btrfs -f -q -L "${ROOT_LABEL}" "${LOOP}p2"   # defaults: DUP metadata (SD cards eat metadata), 16K nodes
 
   MNT="$(mktemp -d)"
   # boot partition: KERNEL (+ md5); arm-efi additionally GRUB + dtbs + abl payload
@@ -307,8 +321,25 @@ main() {
   ( cd "${MNT}" && md5sum KERNEL > KERNEL.md5 )
   [ "${BOOTLOADER}" = "arm-efi" ] && populate_arm_efi_boot "${MNT}"
   sync; umount "${MNT}"
-  # root partition: the rootfs
-  mount "${LOOP}p2" "${MNT}"
+
+  # root partition: subvolume skeleton, then the OS subvol (@) becomes the fs
+  # DEFAULT — the kernel cmdline/fstab never name a subvol, so rollback is just
+  # set-default elsewhere + reboot (see pocknix-snapshots).
+  log "creating btrfs subvolumes (@ @home @snapshots @pacman-cache @var-log)"
+  mount -o compress=zstd:3 "${LOOP}p2" "${MNT}"
+  local sv
+  for sv in @ @home @snapshots @pacman-cache @var-log; do
+    btrfs subvolume create "${MNT}/${sv}" >/dev/null
+  done
+  btrfs subvolume set-default "$(btrfs inspect-internal rootid "${MNT}/@")" "${MNT}"
+  umount "${MNT}"
+  # mount the whole tree so the single rootfs rsync below lands each path in its subvol
+  mount -o compress=zstd:3,subvol=@ "${LOOP}p2" "${MNT}"
+  mkdir -p "${MNT}/home" "${MNT}/.snapshots" "${MNT}/var/cache/pacman" "${MNT}/var/log"
+  for sv in @home:home @snapshots:.snapshots @pacman-cache:var/cache/pacman @var-log:var/log; do
+    mount -o "compress=zstd:3,subvol=${sv%%:*}" "${LOOP}p2" "${MNT}/${sv#*:}"
+  done
+
   log "copying rootfs -> root partition (takes a bit)"
   rsync -aHAX --numeric-ids "${ROOTFS_DIR}/" "${MNT}/"
   firstboot_config "${MNT}"
@@ -316,9 +347,21 @@ main() {
   # 'alarm' in the rootfs). A stray host-owned path here means a host->rootfs copy leaked ownership
   # (see the --chown=root:root rsyncs above) — which silently breaks privilege-bounded services like
   # systemd-timedated (couldn't write /etc/localtime -> timezone changes had no effect). Fail loudly.
-  leaked="$(find "${MNT}" -xdev \( -uid 1000 -o -gid 1000 \) ! -path "${MNT}/home/*" -print -quit)"
-  [ -z "${leaked}" ] || die "host-owned (uid/gid 1000) path leaked into the image: ${leaked#${MNT}} — a host->rootfs rsync needs --chown=root:root"
-  sync; umount "${MNT}"; rmdir "${MNT}"; MNT=""
+  # Each subvolume is its own st_dev, so -xdev stops at their boundaries: sweep every mounted
+  # subvol except @home (deck/uid-1000 content there is expected — no -path exclusion needed).
+  local gate
+  for gate in "${MNT}" "${MNT}/var/log" "${MNT}/var/cache/pacman" "${MNT}/.snapshots"; do
+    leaked="$(find "${gate}" -xdev \( -uid 1000 -o -gid 1000 \) -print -quit)"
+    [ -z "${leaked}" ] || die "host-owned (uid/gid 1000) path leaked into the image: ${leaked#${MNT}} — a host->rootfs rsync needs --chown=root:root"
+  done
+  # Sizing guard: the truncate formula above still uses du-of-rootfs (uncompressed). zstd:3
+  # normally buys back far more than DUP metadata costs; if a change flips that, catch it at
+  # build time instead of shipping an image that ENOSPCs on first boot.
+  local free_kib
+  free_kib="$(df --output=avail -k "${MNT}" | tail -1 | tr -d ' ')"
+  [ "${free_kib}" -ge $(( 512 * 1024 )) ] \
+    || die "btrfs root has only $(( free_kib / 1024 )) MiB free after populate (< 512 MiB) — raise SD_SLACK_MIB or check compression"
+  sync; umount -R "${MNT}"; rmdir "${MNT}"; MNT=""
   losetup -d "${LOOP}"; LOOP=""
   trap - EXIT
 

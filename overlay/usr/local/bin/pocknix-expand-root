@@ -1,8 +1,9 @@
 #!/bin/bash
 # pocknix-expand-root — on first boot, grow the root partition to fill the whole card, then
-# grow the ext4 filesystem online. The SD image is built as rootfs + SD_SLACK_MIB (a few GB),
-# so flashed to a bigger card it leaves the rest unallocated; without this the root fills up
-# fast (e.g. mid-Steam-download). Runs once (guarded by a flag); idempotent + safe to re-run.
+# grow the root filesystem online (btrfs on current images; ext4 on pre-snapshot installs).
+# The SD image is built as rootfs + SD_SLACK_MIB (a few GB), so flashed to a bigger card it
+# leaves the rest unallocated; without this the root fills up fast (e.g. mid-Steam-download).
+# Runs once (guarded by a flag); idempotent + safe to re-run.
 set -euo pipefail
 
 FLAG=/var/lib/pocknix/expand-root.done
@@ -26,11 +27,15 @@ log "root=${src} disk=${disk} part=${part}"
 rc=0
 growpart "${disk}" "${part}" || rc=$?
 if [ "${rc}" -ne 0 ] && [ "${rc}" -ne 2 ]; then
-  log "growpart failed (rc=${rc}) — leaving partition as-is, still trying resize2fs"
+  log "growpart failed (rc=${rc}) — leaving partition as-is, still trying the fs resize"
 fi
 
-# Online-grow the ext4 root to the (possibly) larger partition. No-op if already full.
-resize2fs "${src}" || log "resize2fs returned non-zero (already at max?)"
+# Online-grow the root fs to the (possibly) larger partition. No-op if already full.
+# btrfs resizes a MOUNTED fs by mountpoint (not device node); ext4 keeps resize2fs.
+case "$(findmnt -nro FSTYPE /)" in
+  btrfs) btrfs filesystem resize max / || log "btrfs resize returned non-zero (already at max?)" ;;
+  *)     resize2fs "${src}" || log "resize2fs returned non-zero (already at max?)" ;;
+esac
 
 mkdir -p "$(dirname "${FLAG}")"
 date -u +%FT%TZ > "${FLAG}"

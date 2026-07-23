@@ -207,9 +207,14 @@ configure() {
   #    here at all, and Steam never sees it. =y builds the UTF-8 normalization table in (no
   #    module: filesystems may be mounted before modules load). Pairs with the SD automount
   #    stack (pocknix-sdcard-automount) that mounts + registers the card with Steam.
+  #  - BTRFS_FS: the root filesystem of snapshot-capable images (subvolumes + set-default
+  #    rollback). Both synced base configs already ship =y, but there is no initramfs, so
+  #    a future `make sync` flipping it to =m/off would ship an image that cannot mount
+  #    its own root — pin it and assert below.
   "${KSRC}/scripts/config" --file "${KSRC}/.config" \
     --module QCOM_Q6V5_PAS \
     --enable UNICODE \
+    --enable BTRFS_FS \
     --enable MMC_SDHCI_MSM_DOWNSTREAM \
     --enable FW_LOADER_COMPRESS \
     --enable FW_LOADER_COMPRESS_ZSTD \
@@ -272,6 +277,11 @@ configure() {
     grep -q "^CONFIG_${sym}=y" "${KSRC}/.config" \
       || die "kernel config: CONFIG_${sym} did not resolve to =y (scx_lavd would not run — check the dependency olddefconfig dropped it for)"
   done
+
+  # btrfs must be BUILT-IN: there is no initramfs, so =m means the kernel cannot
+  # mount its own root on snapshot-capable (btrfs) images.
+  grep -q "^CONFIG_BTRFS_FS=y" "${KSRC}/.config" \
+    || die "kernel config: CONFIG_BTRFS_FS did not resolve to =y (btrfs root would be unmountable — no initramfs)"
 }
 
 build_kernel() {

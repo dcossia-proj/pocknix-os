@@ -30,6 +30,8 @@ openssh
 # --- filesystem / storage ---
 e2fsprogs
 dosfstools
+btrfs-progs         # btrfs root: subvolume/snapshot management (pocknix-snapshots hooks,
+                    #   pocknix-rollback) + `btrfs filesystem resize` in pocknix-expand-root
 util-linux
 parted              # pocknix-install-internal repartitions the internal UFS (+ partprobe)
 rsync               # pocknix-install-internal clones the running rootfs to the internal ext4
