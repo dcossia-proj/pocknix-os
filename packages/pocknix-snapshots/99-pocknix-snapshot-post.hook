@@ -1,0 +1,14 @@
+# After the transaction commits: mark the pre-snapshot's info.json as committed-OK,
+# flag reboot-required when a kernel was in the transaction, and prune old snapshots.
+# 99- so it sorts after the 90/95 boot-deploy hooks (KERNEL is already refreshed).
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = pocknix: finalizing snapshot metadata...
+When = PostTransaction
+Exec = /usr/bin/pocknix-snapshot-post

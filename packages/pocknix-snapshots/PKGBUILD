@@ -1,0 +1,51 @@
+# pocknix-snapshots — pre-update btrfs snapshots + bootloader-free rollback.
+# Two alpm hooks snapshot the root subvolume around EVERY pacman transaction;
+# pocknix-rollback switches the filesystem's default subvolume (no boot-config
+# change on either bootloader style) and keeps the /flash kernel coherent via
+# the linux-pocknix deploy scripts' SRCROOT/OUT_SUFFIX staging mode. All entry
+# points no-op when / is not btrfs (build chroot, pre-snapshot ext4 installs).
+pkgname=pocknix-snapshots
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="pocknix pre-update btrfs snapshots, rollback (subvolume set-default) and non-interactive updater"
+arch=('any')
+url="https://github.com/shuuri-labs/pocknix-os"
+license=('GPL2')
+depends=('btrfs-progs' 'jq' 'util-linux')
+backup=('etc/pocknix/snapshots.conf')
+source=('05-pocknix-snapshot.hook' '99-pocknix-snapshot-post.hook'
+        'snapshot-lib.sh'
+        'pocknix-snapshot-pre' 'pocknix-snapshot-post'
+        'pocknix-snapshots' 'pocknix-rollback' 'pocknix-apply-update'
+        'pocknix-rollback-repair' 'pocknix-rollback-repair.service'
+        'snapshots.conf' '50-pocknix-snapshots.rules')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+package() {
+  install -Dm644 "${srcdir}/05-pocknix-snapshot.hook" \
+    "${pkgdir}/usr/share/libalpm/hooks/05-pocknix-snapshot.hook"
+  install -Dm644 "${srcdir}/99-pocknix-snapshot-post.hook" \
+    "${pkgdir}/usr/share/libalpm/hooks/99-pocknix-snapshot-post.hook"
+
+  install -Dm644 "${srcdir}/snapshot-lib.sh" "${pkgdir}/usr/lib/pocknix/snapshot-lib.sh"
+
+  local bin
+  for bin in pocknix-snapshot-pre pocknix-snapshot-post pocknix-snapshots \
+             pocknix-rollback pocknix-apply-update pocknix-rollback-repair; do
+    install -Dm755 "${srcdir}/${bin}" "${pkgdir}/usr/bin/${bin}"
+  done
+
+  install -Dm644 "${srcdir}/snapshots.conf" "${pkgdir}/etc/pocknix/snapshots.conf"
+
+  # passwordless pkexec for wheel (desktop/ssh path; the QAM backend is already root)
+  install -Dm644 "${srcdir}/50-pocknix-snapshots.rules" \
+    "${pkgdir}/usr/share/polkit-1/rules.d/50-pocknix-snapshots.rules"
+
+  # repair oneshot, statically enabled (wants symlink): ConditionPathExists gates it
+  # to rolled-back boots, so it is inert everywhere else
+  install -Dm644 "${srcdir}/pocknix-rollback-repair.service" \
+    "${pkgdir}/usr/lib/systemd/system/pocknix-rollback-repair.service"
+  install -d "${pkgdir}/usr/lib/systemd/system/multi-user.target.wants"
+  ln -s ../pocknix-rollback-repair.service \
+    "${pkgdir}/usr/lib/systemd/system/multi-user.target.wants/pocknix-rollback-repair.service"
+}

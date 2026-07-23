@@ -1,0 +1,17 @@
+# Read-only btrfs snapshot of the root subvolume BEFORE any package transaction, so
+# pocknix-rollback (QAM "Roll back" button / CLI) can undo it. Fires for EVERY pacman
+# entry point (QAM update, pocknix-update, plain -Syu over ssh) — the protection lives
+# in alpm, not in any updater. Deliberately NO AbortOnFail: a failed or skipped snapshot
+# (ext4 install, build chroot, low disk space) must never block the update itself.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = pocknix: pre-update btrfs snapshot...
+When = PreTransaction
+Exec = /usr/bin/pocknix-snapshot-pre
+NeedsTargets

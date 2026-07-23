@@ -1,0 +1,11 @@
+[Unit]
+Description=pocknix: finish an interrupted rollback (activate staged /flash boot files)
+ConditionPathExists=/var/lib/pocknix/rollback-info.json
+RequiresMountsFor=/flash
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pocknix-rollback-repair
+
+[Install]
+WantedBy=multi-user.target

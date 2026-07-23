@@ -1,0 +1,113 @@
+#!/bin/bash
+# pocknix-rollback — roll the OS back to a pre-update snapshot WITHOUT a bootloader
+# menu (the sm8550 ABL has none): make a writable snapshot of the chosen read-only
+# snapshot at the btrfs toplevel, point the filesystem's DEFAULT subvolume at it
+# (the single atomic commit — cmdline/fstab name no subvol, so next boot lands there),
+# regenerate /flash boot files from the target tree when its kernel differs, reboot.
+# /home, /var/log, /.snapshots and the pacman cache are separate subvols: untouched.
+#
+#   pocknix-rollback [--to <id>] [--yes]     roll back (default: newest snapshot)
+#   pocknix-rollback --list | --status       delegate to pocknix-snapshots
+set -euo pipefail
+
+. /usr/lib/pocknix/snapshot-lib.sh
+
+FLASH=/flash
+RUN=/run/pocknix
+TOP="${RUN}/rollback-top"
+
+die() { echo "pocknix-rollback: $*" >&2; exit 1; }
+
+target="" assume_yes=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --to)     target="${2:?--to needs a snapshot id}"; shift 2 ;;
+    --yes)    assume_yes=1; shift ;;
+    --list)   exec pocknix-snapshots list ;;
+    --status) exec pocknix-snapshots status ;;
+    *) die "unknown argument '$1' (usage: pocknix-rollback [--to <id>] [--yes] [--list] [--status])" ;;
+  esac
+done
+
+[ "$(id -u)" = 0 ] || die "needs root (or pkexec pocknix-rollback)"
+pocknix_snap_supported || die "root is not btrfs — snapshots unsupported on this install (reflash to migrate)"
+mountpoint -q "${FLASH}" || die "${FLASH} not mounted — cannot guarantee kernel/rootfs coherence"
+
+# default target: the newest snapshot
+if [ -z "${target}" ]; then
+  target="$(ls "${SNAP_DIR}" | grep -E '^[0-9]{4}$' | sort -n | tail -1 || true)"
+  [ -n "${target}" ] || die "no snapshots exist yet (they are created before each update)"
+fi
+src="${SNAP_DIR}/${target}/snapshot"
+[ -d "${src}" ] || die "snapshot '${target}' not found (pocknix-rollback --list)"
+[ "$(btrfs property get -ts "${src}" ro 2>/dev/null)" = "ro=true" ] || die "snapshot '${target}' is not read-only — refusing"
+
+if [ -f "${SNAP_DIR}/${target}/info.json" ] && [ -z "${assume_yes}" ]; then
+  echo "Rolling back to snapshot ${target}:"
+  jq -r '"  created : \(.created)\n  undoes  : \(.targets_head | join(" "))\(if .targets_count > 8 then " (+\(.targets_count - 8) more)" else "" end)\n  kernel  : \(if .kernel_in_transaction then "was updated in that transaction (boot files will be restored)" else "unchanged" end)"' \
+    "${SNAP_DIR}/${target}/info.json"
+  echo "  kept    : /home (games/saves), /var/log, snapshots"
+  read -rp "Proceed? [y/N]: " a
+  case "${a}" in y|Y) ;; *) echo "Cancelled."; exit 0 ;; esac
+fi
+
+# single rollback at a time (mkdir is the atomic lock)
+mkdir "${RUN}/rollback.lock" 2>/dev/null || die "another rollback is already running"
+cleanup() {
+  umount "${TOP}" 2>/dev/null || true
+  rmdir "${TOP}" 2>/dev/null || true
+  rmdir "${RUN}/rollback.lock" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+mkdir -p "${TOP}"
+mount -o subvolid=5 "$(snap_root_dev)" "${TOP}"
+
+ts="$(date -u +%Y%m%d-%H%M%S)"
+new="@rb-${ts}"
+btrfs subvolume snapshot "${src}" "${TOP}/${new}" >/dev/null
+
+# marker inside the new root: the booted system (QAM) can say "this was rolled back";
+# also the ConditionPathExists gate for pocknix-rollback-repair.service.
+mkdir -p "${TOP}/${new}/var/lib/pocknix"
+jq -n --arg from "${target}" --arg prev "$(snap_default_subvol)" --arg ts "$(date -u +%FT%TZ)" \
+  '{schema:1, from_snapshot:$from, previous_default:$prev, ts:$ts}' \
+  > "${TOP}/${new}/var/lib/pocknix/rollback-info.json"
+
+# Kernel coherence: the snapshot restores /usr/lib/modules, but the kernel lives on
+# the FAT (/flash), outside btrfs. If the target's kernel differs from the running
+# one, STAGE regenerated boot files from the target tree (KERNEL.new etc.) now —
+# any failure aborts here, before anything is committed. cmp is the ground truth
+# (covers rolling back across several kernel bumps, unlike the single-transaction
+# metadata flag).
+staged=""
+if ! cmp -s /boot/Image "${TOP}/${new}/boot/Image"; then
+  regen=""
+  command -v pocknix-build-bootimg >/dev/null 2>&1 && regen=pocknix-build-bootimg   # qcom-abl (sm8550)
+  [ -z "${regen}" ] && command -v pocknix-update-boot >/dev/null 2>&1 && regen=pocknix-update-boot  # arm-efi (sm8250)
+  [ -n "${regen}" ] || die "kernel differs but no boot-deploy script found (linux-pocknix not installed?)"
+  echo "pocknix-rollback: target kernel differs — staging boot files from the snapshot (${regen})"
+  SRCROOT="${TOP}/${new}" OUT_SUFFIX=".new" "${regen}" \
+    || die "boot-file staging failed — NOTHING was committed, system unchanged"
+  [ -f "${FLASH}/KERNEL.new" ] || die "staging produced no ${FLASH}/KERNEL.new — aborting before commit"
+  staged=1
+fi
+
+# THE COMMIT: a single atomic btrfs transaction. Crash before this line: nothing
+# changed (stray @rb-* pruned later). Crash after: the new root boots.
+btrfs subvolume set-default "$(btrfs inspect-internal rootid "${TOP}/${new}")" /
+
+# activate staged boot files (crash in this window leaves *.new for
+# pocknix-rollback-repair.service to finish on the next boot)
+if [ -n "${staged}" ]; then
+  mount -o remount,rw "${FLASH}" 2>/dev/null || true
+  shopt -s nullglob
+  for f in "${FLASH}/KERNEL.new" "${FLASH}/KERNEL.md5.new" "${FLASH}"/boot/grub/*.dtb.new; do
+    [ -f "${f}" ] && mv -f "${f}" "${f%.new}"
+  done
+  sync
+fi
+
+pocknix-snapshots prune --quiet || true
+sync
+echo "pocknix-rollback: default root is now ${new} (from snapshot ${target}) — REBOOT to complete"

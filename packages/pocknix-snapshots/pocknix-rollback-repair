@@ -1,0 +1,22 @@
+#!/bin/bash
+# pocknix-rollback-repair — finish an interrupted rollback. pocknix-rollback stages
+# regenerated boot files as /flash/*.new BEFORE its atomic set-default commit and
+# renames them right after; a crash in that window boots the new root with the old
+# kernel still active (bootable, one boot of module skew). This oneshot (condition-
+# gated on the rollback marker) activates any leftover staged files. Always exits 0.
+set -uo pipefail
+
+FLASH=/flash
+mountpoint -q "${FLASH}" || exit 0
+
+staged=()
+shopt -s nullglob
+for f in "${FLASH}/KERNEL.new" "${FLASH}/KERNEL.md5.new" "${FLASH}"/boot/grub/*.dtb.new; do
+  [ -f "${f}" ] && staged+=("${f}")
+done
+[ "${#staged[@]}" -gt 0 ] || exit 0
+
+mount -o remount,rw "${FLASH}" 2>/dev/null || true
+for f in "${staged[@]}"; do mv -f "${f}" "${f%.new}"; done
+sync
+echo "pocknix-rollback-repair: activated ${#staged[@]} staged boot file(s) left by an interrupted rollback"

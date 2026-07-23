@@ -1,0 +1,61 @@
+#!/bin/bash
+# pocknix-snapshot-pre — alpm PreTransaction hook body: read-only snapshot of the root
+# subvolume + info.json metadata, before pacman touches anything. Targets arrive on
+# stdin (NeedsTargets). EVERY exit path is 0: the update must proceed regardless.
+set -uo pipefail
+
+. /usr/lib/pocknix/snapshot-lib.sh
+pocknix_snap_supported || exit 0
+
+RUN=/run/pocknix
+mkdir -p "${RUN}"
+rm -f "${RUN}/last-transaction.json"   # stale info from a previous transaction
+
+targets="$(cat || true)"
+[ -n "${targets}" ] || exit 0
+
+kernel_in=false
+grep -q '^linux-pocknix-' <<<"${targets}" && kernel_in=true
+# the kernel version the SNAPSHOT contains (pre-transaction = old version)
+kernel_pkg="$(pacman -Q linux-pocknix-sm8550 linux-pocknix-sm8250 2>/dev/null | head -n1 || true)"
+
+write_last_transaction() {  # $1 = snapshot id or empty, $2 = low_space bool
+  jq -n --arg id "${1}" --argjson low "${2}" --argjson kin "${kernel_in}" \
+    '{schema:1, snapshot_id:(if $id == "" then null else $id end),
+      low_space:$low, kernel_in_transaction:$kin}' \
+    > "${RUN}/.lt.tmp" && mv "${RUN}/.lt.tmp" "${RUN}/last-transaction.json"
+}
+
+free_mib="$(snap_free_mib)"; free_mib="${free_mib:-0}"
+if [ "${free_mib}" -lt "${POCKNIX_SNAPSHOT_MIN_FREE_MIB}" ]; then
+  echo "pocknix-snapshot-pre: only ${free_mib} MiB free (< ${POCKNIX_SNAPSHOT_MIN_FREE_MIB}) — SKIPPING pre-update snapshot; the update still proceeds" >&2
+  write_last_transaction "" true
+  exit 0
+fi
+
+id="$(snap_next_id)"
+dir="${SNAP_DIR}/${id}"
+mkdir -p "${dir}"
+if ! btrfs subvolume snapshot -r / "${dir}/snapshot" >/dev/null; then
+  echo "pocknix-snapshot-pre: snapshot failed — update proceeds WITHOUT a rollback point" >&2
+  rmdir "${dir}" 2>/dev/null || true
+  write_last_transaction "" false
+  exit 0
+fi
+
+# transaction_ok flips to true in the PostTransaction hook; if pacman dies mid-commit
+# the post hook never runs and this snapshot stays marked as an interrupted transaction.
+jq -n \
+  --arg id "${id}" --arg created "$(date -u +%FT%TZ)" \
+  --arg kernel_pkg "${kernel_pkg}" --argjson kin "${kernel_in}" \
+  --argjson count "$(wc -l <<<"${targets}" | tr -d ' ')" \
+  --argjson head "$(head -n 8 <<<"${targets}" | jq -R . | jq -s .)" \
+  '{schema:1, id:$id, created:$created, reason:"pre-update",
+    kernel_pkg:$kernel_pkg, kernel_in_transaction:$kin,
+    targets_count:$count, targets_head:$head,
+    transaction_ok:false, finished:null, low_space:false}' \
+  > "${dir}/.info.tmp" && mv "${dir}/.info.tmp" "${dir}/info.json"
+
+write_last_transaction "${id}" false
+echo "pocknix-snapshot-pre: snapshot ${id} created (${free_mib} MiB free)"
+exit 0

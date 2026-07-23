@@ -18,3 +18,4 @@ fex-emu                # x86 emulator (thunks)
 fex-rootfs             # ~1.1 GB Arch x86 squashfs the games' libraries resolve from
 pocknix-desktop        # Plasma Mobile session + game<->desktop switch
 pocknix-decky          # Decky loader + Pocknix Control QAM plugin
+pocknix-snapshots      # pre-update btrfs snapshots + rollback (set-default) + QAM updater backend

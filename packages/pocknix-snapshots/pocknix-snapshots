@@ -1,0 +1,86 @@
+#!/bin/bash
+# pocknix-snapshots — inspect + prune the pre-update btrfs snapshots.
+#   list           snapshot table (id, date, ok, kernel?, targets)
+#   status         which root is mounted / which boots next / free space
+#   prune [--quiet]  apply retention: keep newest ${POCKNIX_SNAPSHOT_KEEP} snapshots
+#                  + 1 abandoned root subvol. Run by the post-update hook + rollback.
+set -euo pipefail
+
+. /usr/lib/pocknix/snapshot-lib.sh
+
+die() { echo "pocknix-snapshots: $*" >&2; exit 1; }
+
+cmd_list() {
+  pocknix_snap_supported || die "snapshots unsupported here (root is not btrfs — pre-snapshot install; reflash to migrate)"
+  printf '%-6s %-22s %-4s %-8s %s\n' "ID" "CREATED" "OK" "KERNEL" "TARGETS"
+  local info
+  for info in "${SNAP_DIR}"/[0-9][0-9][0-9][0-9]/info.json; do
+    [ -f "${info}" ] || continue
+    jq -r '[.id, .created, (if .transaction_ok then "yes" else "no" end),
+            (if .kernel_in_transaction then "yes" else "-" end),
+            ((.targets_head | join(" ")) + (if .targets_count > 8 then " (+\(.targets_count - 8) more)" else "" end))]
+           | @tsv' "${info}" \
+      | awk -F'\t' '{printf "%-6s %-22s %-4s %-8s %s\n", $1, $2, $3, $4, $5}'
+  done
+}
+
+cmd_status() {
+  local fstype; fstype="$(findmnt -no FSTYPE /)"
+  echo "root filesystem : ${fstype}"
+  if ! pocknix_snap_supported; then
+    echo "snapshots       : unsupported (pre-snapshot install; reflash to migrate)"
+    return 0
+  fi
+  local mounted default
+  mounted="$(snap_mounted_subvol)"; default="$(snap_default_subvol)"
+  echo "running root    : ${mounted:-?}"
+  echo "boots next      : ${default:-?} $([ "${mounted}" = "${default}" ] && echo '(same)' || echo '(REBOOT PENDING: differs from running root)')"
+  if [ -f /var/lib/pocknix/rollback-info.json ]; then
+    echo "rolled back     : yes (from snapshot $(jq -r '.from_snapshot' /var/lib/pocknix/rollback-info.json), $(jq -r '.ts' /var/lib/pocknix/rollback-info.json))"
+  fi
+  [ -f /run/pocknix/reboot-required ] && echo "reboot required : yes (kernel updated)"
+  echo "free space      : $(df -h --output=avail / | tail -1 | tr -d ' ') ($(snap_free_mib) MiB; snapshot floor ${POCKNIX_SNAPSHOT_MIN_FREE_MIB} MiB, UI warning ${POCKNIX_SNAPSHOT_WARN_FREE_MIB} MiB)"
+  echo "snapshots       : $(ls "${SNAP_DIR}" 2>/dev/null | grep -Ec '^[0-9]{4}$' || true) kept (retention ${POCKNIX_SNAPSHOT_KEEP})"
+}
+
+cmd_prune() {
+  local quiet="${1:-}"
+  say() { [ "${quiet}" = "--quiet" ] || echo "pocknix-snapshots: $*"; }
+  pocknix_snap_supported || exit 0
+  [ "$(id -u)" = 0 ] || die "prune needs root"
+
+  # 1) pre-update snapshots: keep the newest ${POCKNIX_SNAPSHOT_KEEP}
+  local ids extra id
+  ids="$(ls "${SNAP_DIR}" 2>/dev/null | grep -E '^[0-9]{4}$' | sort -n || true)"
+  extra=$(( $(wc -l <<<"${ids}") - POCKNIX_SNAPSHOT_KEEP ))
+  if [ -n "${ids}" ] && [ "${extra}" -gt 0 ]; then
+    for id in $(head -n "${extra}" <<<"${ids}"); do
+      btrfs subvolume delete "${SNAP_DIR}/${id}/snapshot" >/dev/null 2>&1 || true
+      rm -rf "${SNAP_DIR:?}/${id}"
+      say "pruned snapshot ${id}"
+    done
+  fi
+
+  # 2) abandoned root subvols (@ / @rb-*): keep ONE beyond the default + the mounted
+  # root, for post-mortem after a rollback. Never touch the default or the running root.
+  local top=/run/pocknix/prune-top mounted default roots keepable r
+  mounted="$(snap_mounted_subvol)"; default="$(snap_default_subvol)"
+  mkdir -p "${top}"
+  if mount -o subvolid=5 "$(snap_root_dev)" "${top}" 2>/dev/null; then
+    roots="$(cd "${top}" && ls -d @ @rb-* 2>/dev/null | grep -vx "${mounted}" | grep -vx "${default}" | sort || true)"
+    keepable="$(tail -n 1 <<<"${roots}")"   # lexically newest ("@" sorts before "@rb-<ts>")
+    for r in ${roots}; do
+      [ "${r}" = "${keepable}" ] && continue
+      btrfs subvolume delete "${top}/${r}" >/dev/null 2>&1 && say "pruned abandoned root ${r}" || true
+    done
+    umount "${top}" 2>/dev/null || true
+  fi
+  rmdir "${top}" 2>/dev/null || true
+}
+
+case "${1:-list}" in
+  list)   cmd_list ;;
+  status) cmd_status ;;
+  prune)  cmd_prune "${2:-}" ;;
+  *) echo "usage: pocknix-snapshots [list|status|prune [--quiet]]" >&2; exit 1 ;;
+esac
