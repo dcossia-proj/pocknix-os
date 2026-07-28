@@ -95,9 +95,17 @@ fi
 # slow), full SDL pad bindings (the wizard writes none -> dead controller), 2.5x upscale (~1120p,
 # closest to the 1080p panel), BIOS = the standardized name ps2-bios.bin in ~/Emulation/BIOS
 # (users rename their dump to that -- see README). Never clobbers an existing config.
-if [ -f "${SHARE}/armsx2-PCSX2.ini.in" ] && [ ! -f "${HOME}/.config/PCSX2/inis/PCSX2.ini" ]; then
-  mkdir -p "${HOME}/.config/PCSX2/inis"
-  sed "s|__HOME__|${HOME}|g" "${SHARE}/armsx2-PCSX2.ini.in" > "${HOME}/.config/PCSX2/inis/PCSX2.ini" 2>/dev/null || true
+# Config base is ~/.config/ARMSX2 since the switch to the official upstream nightlies
+# (2026-07-28); masi's fork used PCSX2's stock ~/.config/PCSX2. Same tree layout inside, so
+# a pre-switch install migrates by copying the whole old tree (config + memcards + sstates)
+# before the seed check -- otherwise upgraded devices hit the setup wizard and lose saves.
+if [ -f "${HOME}/.config/PCSX2/inis/PCSX2.ini" ] && [ ! -f "${HOME}/.config/ARMSX2/inis/PCSX2.ini" ]; then
+  mkdir -p "${HOME}/.config/ARMSX2"
+  cp -a "${HOME}/.config/PCSX2/." "${HOME}/.config/ARMSX2/" 2>/dev/null || true
+fi
+if [ -f "${SHARE}/armsx2-PCSX2.ini.in" ] && [ ! -f "${HOME}/.config/ARMSX2/inis/PCSX2.ini" ]; then
+  mkdir -p "${HOME}/.config/ARMSX2/inis"
+  sed "s|__HOME__|${HOME}|g" "${SHARE}/armsx2-PCSX2.ini.in" > "${HOME}/.config/ARMSX2/inis/PCSX2.ini" 2>/dev/null || true
 fi
 
 # --- seed Eden (Switch) config: pad bindings + per-device vsync + 1x resolution ---
