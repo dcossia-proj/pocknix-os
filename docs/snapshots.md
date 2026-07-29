@@ -43,18 +43,34 @@ that tiny window is healed on the next boot by `pocknix-rollback-repair.service`
 
 ## Using it
 
-- **QAM:** Pocknix Control → Updater tab → *Roll Back Last Update* → Reboot.
-- **CLI (desktop/ssh):**
+Three front-ends, one mechanism — pick whichever still works when things go wrong:
+
+- **Game mode (QAM):** Pocknix Control → Updater tab → **Roll Back Last Update** → confirm →
+  **Reboot Now**. See [pocknix-control.md](pocknix-control.md#rolling-back-an-update) for the
+  full walkthrough.
+- **Desktop mode:** the **Pocknix Rollback** entry in the app grid opens a terminal with the
+  same confirm-and-go flow (no password needed). Use this when Steam or the plugin is what
+  broke.
+- **CLI (terminal/ssh):**
 
 ```bash
 pocknix-snapshots list          # what you can roll back to
 pocknix-snapshots status        # running root / boots-next / free space
 sudo pocknix-rollback           # newest snapshot, interactive confirm
-sudo pocknix-rollback --to 0003 # a specific one
+sudo pocknix-rollback --to 0003 # jump straight to a specific snapshot
 ```
+
+Snapshots are full photographs of the system, not incremental steps, so `--to` is always a
+**single jump** — no rolling back one update at a time. It is also directionless: from a
+restored older state, `--to` a newer snapshot moves you forward again. The QAM only ever
+offers the *last* update (the common case); anything deeper is the CLI's job. Times are
+stored in UTC but always displayed in local time.
 
 Rolling back a rollback works the same way — every rollback creates a fresh root from an
 immutable read-only snapshot, and the abandoned root is kept (one deep) for inspection.
+After a rollback the QAM shows a *"System was rolled back"* notice and hides the rollback
+button (you are already on that snapshot's state); the next update clears the notice,
+takes a fresh snapshot, and brings the button back.
 
 ## Manual recovery (device won't boot after a kernel update)
 

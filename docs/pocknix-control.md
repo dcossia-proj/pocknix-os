@@ -13,7 +13,7 @@ tapping the icons:
 | 🎮 Games | Per-game performance/audio tweaks, add non-Steam games |
 | ⚡ Power | Fan curve and CPU scheduler |
 | 💾 Storage | Format a microSD card for Steam |
-| 🔄 Updater | Check for and install system updates |
+| 🔄 Updater | Check for and install system updates, roll back the last update |
 
 Settings save automatically as you change them.
 
@@ -88,8 +88,36 @@ System updates, without leaving game mode:
    the pocknix pacman repo, so no reflashing).
 2. **Install Updates** downloads and installs the lot. Keep the device powered; a running
    game may stutter while it installs.
-3. Restart when it finishes to apply everything.
+3. Restart when it finishes to apply everything (**Restart Now** appears right there).
 
 The update keeps running even if you close the Quick Access menu - reopen the tab to check
 on progress. If you prefer, the same update is just `sudo pacman -Syu` in a terminal, or the
 **Pocknix Updater** shortcut in desktop mode.
+
+### Rolling back an update
+
+Every update automatically takes a **snapshot** of the system first - so if an update breaks
+something, you can undo it from the same tab.
+
+The **Rollback** section shows the last snapshot: when it was taken and which packages it
+would undo. To use it:
+
+1. Press **Roll Back Last Update**. The confirmation tells you exactly what gets restored -
+   and what is kept: **your games, saves and settings are never touched** by a rollback. If
+   the update included a kernel, the previous kernel comes back too.
+2. Confirm. It takes a few seconds, then press **Reboot Now**.
+3. The device boots straight back into the system as it was before the update.
+
+After a rollback the tab shows a *"System was rolled back"* notice and the rollback button
+disappears - the system already **is** the restored state, so there is nothing to undo. It
+all comes back the next time you install an update.
+
+Notes:
+
+- The section also shows free storage. If the card is nearly full, snapshots are skipped
+  (updates still install - you just would not be able to undo that one).
+- The QAM always rolls back the **last** update only. To go further back, or if game mode
+  itself is broken, use the **Pocknix Rollback** shortcut in desktop mode or the terminal -
+  see [snapshots.md](snapshots.md) for those and for how it all works underneath.
+- Older pocknix installs (before the snapshot feature) do not show the Rollback section at
+  all; a reflash with a current image is what enables it.
