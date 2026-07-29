@@ -72,6 +72,10 @@ ts="$(date -u +%Y%m%d-%H%M%S)"
 new="@rb-${ts}"
 btrfs subvolume snapshot "${src}" "${TOP}/${new}" >/dev/null
 
+# The snapshot was taken INSIDE a pacman transaction (PreTransaction hook), so it
+# contains pacman's own db.lck — restored as-is it blocks every future update.
+rm -f "${TOP}/${new}/var/lib/pacman/db.lck"
+
 # marker inside the new root: the booted system (QAM) can say "this was rolled back";
 # also the ConditionPathExists gate for pocknix-rollback-repair.service.
 mkdir -p "${TOP}/${new}/var/lib/pocknix"
