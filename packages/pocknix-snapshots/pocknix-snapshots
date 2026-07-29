@@ -10,17 +10,22 @@ set -euo pipefail
 
 die() { echo "pocknix-snapshots: $*" >&2; exit 1; }
 
+snap_fmt_date() {  # ISO-8601 UTC (stored) -> local DD/MM/YYYY HH:MM (shown)
+  date -d "$1" +"%d/%m/%Y %H:%M" 2>/dev/null || echo "$1"
+}
+
 cmd_list() {
   pocknix_snap_supported || die "snapshots unsupported here (root is not btrfs — pre-snapshot install; reflash to migrate)"
-  printf '%-6s %-22s %-4s %-8s %s\n' "ID" "CREATED" "OK" "KERNEL" "TARGETS"
-  local info
+  printf '%-6s %-17s %-4s %-8s %s\n' "ID" "CREATED" "OK" "KERNEL" "TARGETS"
+  local info id created ok kern targets
   for info in "${SNAP_DIR}"/[0-9][0-9][0-9][0-9]/info.json; do
     [ -f "${info}" ] || continue
-    jq -r '[.id, .created, (if .transaction_ok then "yes" else "no" end),
+    while IFS=$'\t' read -r id created ok kern targets; do
+      printf '%-6s %-17s %-4s %-8s %s\n' "${id}" "$(snap_fmt_date "${created}")" "${ok}" "${kern}" "${targets}"
+    done < <(jq -r '[.id, .created, (if .transaction_ok then "yes" else "no" end),
             (if .kernel_in_transaction then "yes" else "-" end),
             ((.targets_head | join(" ")) + (if .targets_count > 8 then " (+\(.targets_count - 8) more)" else "" end))]
-           | @tsv' "${info}" \
-      | awk -F'\t' '{printf "%-6s %-22s %-4s %-8s %s\n", $1, $2, $3, $4, $5}'
+           | @tsv' "${info}")
   done
 }
 

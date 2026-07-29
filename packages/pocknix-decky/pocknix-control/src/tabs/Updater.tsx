@@ -7,6 +7,14 @@ const SHOWN_UPDATES = 8;
 
 const gib = (bytes: number) => (bytes / 1024 ** 3).toFixed(1);
 
+// snapshot metadata stores ISO-8601 UTC; show local DD/MM/YYYY HH:MM
+const fmtDate = (iso: string) => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
 export function Updater() {
   const [updates, setUpdates] = useState<UpdateInfo[] | null>(null);
   const [checking, setChecking] = useState(false);
@@ -105,7 +113,7 @@ export function Updater() {
       <ConfirmModal
         strTitle="Roll Back Last Update"
         strDescription={
-          `Restores the system to before the update of ${lastSnapshot.created}` +
+          `Restores the system to before the update of ${fmtDate(lastSnapshot.created)}` +
           (lastSnapshot.targets ? ` (${lastSnapshot.targets})` : "") +
           `. Games, saves and settings are kept.` +
           (lastSnapshot.kernel ? " The previous kernel is restored too." : "") +
@@ -169,7 +177,7 @@ export function Updater() {
           {snap.rolledBack && !rollbackDone ? (
             <Field
               label="System was rolled back"
-              description={`Restored from snapshot ${snap.rolledBack.fromSnapshot} (${snap.rolledBack.ts}). The next update clears this notice.`}
+              description={`Restored from snapshot ${snap.rolledBack.fromSnapshot} (${fmtDate(snap.rolledBack.ts)}). The next update clears this notice.`}
             />
           ) : null}
           {rollbackDone ? (
@@ -181,7 +189,7 @@ export function Updater() {
             </>
           ) : lastSnapshot ? (
             <>
-              <Field label="Last snapshot" description={`${lastSnapshot.created}${lastSnapshot.targets ? ` — ${lastSnapshot.targets}` : ""}`} />
+              <Field label="Last snapshot" description={`${fmtDate(lastSnapshot.created)}${lastSnapshot.targets ? ` — ${lastSnapshot.targets}` : ""}`} />
               <PanelSectionRow>
                 <ButtonItem layout="below" disabled={busyRef.current} onClick={confirmRollback}>
                   {rollingBack ? "Rolling back…" : "Roll Back Last Update"}

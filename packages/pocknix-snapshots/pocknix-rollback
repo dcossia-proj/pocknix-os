@@ -43,8 +43,11 @@ src="${SNAP_DIR}/${target}/snapshot"
 [ "$(btrfs property get -ts "${src}" ro 2>/dev/null)" = "ro=true" ] || die "snapshot '${target}' is not read-only — refusing"
 
 if [ -f "${SNAP_DIR}/${target}/info.json" ] && [ -z "${assume_yes}" ]; then
+  created="$(jq -r '.created' "${SNAP_DIR}/${target}/info.json")"
+  created="$(date -d "${created}" +"%d/%m/%Y %H:%M" 2>/dev/null || echo "${created}")"
   echo "Rolling back to snapshot ${target}:"
-  jq -r '"  created : \(.created)\n  undoes  : \(.targets_head | join(" "))\(if .targets_count > 8 then " (+\(.targets_count - 8) more)" else "" end)\n  kernel  : \(if .kernel_in_transaction then "was updated in that transaction (boot files will be restored)" else "unchanged" end)"' \
+  jq -r --arg created "${created}" \
+    '"  created : \($created)\n  undoes  : \(.targets_head | join(" "))\(if .targets_count > 8 then " (+\(.targets_count - 8) more)" else "" end)\n  kernel  : \(if .kernel_in_transaction then "was updated in that transaction (boot files will be restored)" else "unchanged" end)"' \
     "${SNAP_DIR}/${target}/info.json"
   echo "  kept    : /home (games/saves), /var/log, snapshots"
   read -rp "Proceed? [y/N]: " a
