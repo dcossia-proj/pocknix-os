@@ -11,7 +11,7 @@ set -euo pipefail
 die() { echo "pocknix-snapshots: $*" >&2; exit 1; }
 
 snap_fmt_date() {  # ISO-8601 UTC (stored) -> local DD/MM/YYYY HH:MM (shown)
-  date -d "$1" +"%d/%m/%Y %H:%M" 2>/dev/null || echo "$1"
+  date -d "$1" +"%d-%m-%Y %H:%M" 2>/dev/null || echo "$1"
 }
 
 cmd_list() {
