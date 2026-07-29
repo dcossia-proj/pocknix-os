@@ -94,6 +94,9 @@ export function Updater() {
     );
 
   const lastSnapshot = snap?.supported && snap.snapshots.length > 0 ? snap.snapshots[snap.snapshots.length - 1] : null;
+  // Already rolled back onto the latest snapshot: another rollback would be a no-op,
+  // so hide the button until the next update (which clears the marker + snapshots anew).
+  const onLastSnapshot = !!(snap?.rolledBack && lastSnapshot && snap.rolledBack.fromSnapshot === lastSnapshot.id);
 
   const rollBack = async () => {
     if (busyRef.current || !lastSnapshot) return;
@@ -178,7 +181,7 @@ export function Updater() {
           {snap.rolledBack && !rollbackDone ? (
             <Field
               label="System was rolled back"
-              description={`Restored from snapshot ${snap.rolledBack.fromSnapshot} (${fmtDate(snap.rolledBack.ts)}). The next update clears this notice.`}
+              description={`Restored from snapshot ${snap.rolledBack.fromSnapshot} (${fmtDate(snap.rolledBack.ts)}).${onLastSnapshot ? " Rollback will be available again after the next update." : ""}`}
             />
           ) : null}
           {rollbackDone ? (
@@ -188,7 +191,7 @@ export function Updater() {
                 <ButtonItem layout="below" onClick={reboot}>Reboot Now</ButtonItem>
               </PanelSectionRow>
             </>
-          ) : lastSnapshot ? (
+          ) : onLastSnapshot ? null : lastSnapshot ? (
             <>
               <Field label="Last snapshot" description={`${fmtDate(lastSnapshot.created)}${lastSnapshot.targets ? ` — ${lastSnapshot.targets}` : ""}`} />
               <PanelSectionRow>
