@@ -12,7 +12,9 @@ FLAG=/var/lib/pocknix/expand-root.done
 log() { echo "[pocknix-expand-root] $*"; }
 
 # Resolve the real device backing / (e.g. /dev/mmcblk0p2, /dev/sda2, /dev/nvme0n1p2).
+# btrfs reports SOURCE as "/dev/…[/@]" — strip the subvol suffix or readlink dies here.
 src=$(findmnt -nro SOURCE /)
+src="${src%%\[*}"
 src=$(readlink -f "${src}")
 case "${src}" in
   */*[0-9]p[0-9]*) disk="${src%p*}"; part="${src##*p}" ;;   # mmcblk0p2 / nvme0n1p2
