@@ -1,4 +1,5 @@
 import re
+import threading
 from pathlib import Path
 
 from .system import run_cmd
@@ -16,6 +17,11 @@ EXIT_MARK = "POCKNIX_UPDATE_EXIT:"
 CHECK_DB = Path("/run/pocknix-check-db")
 
 VER_RE = re.compile(r"^(\S+)\s+(\S+)$")
+
+# One check at a time. The frontend's own 'checking' state dies with the QAM panel
+# (closing mid-check + retapping raced pacman on the throwaway db: "unable to lock
+# database"), so the serialization has to live here.
+_check_lock = threading.Lock()
 
 
 def _pacman(args, timeout):
@@ -40,14 +46,26 @@ def _unit_running():
 def check_updates():
     if _unit_running():
         raise RuntimeError("An update is already running")
+    if not _check_lock.acquire(blocking=False):
+        raise RuntimeError("Already checking for updates — give it a moment and try again")
+    try:
+        return _check_updates_locked()
+    finally:
+        _check_lock.release()
+
+
+def _check_updates_locked():
     (CHECK_DB / "sync").mkdir(parents=True, exist_ok=True)
     local = CHECK_DB / "local"
     if not local.exists():
         local.symlink_to("/var/lib/pacman/local")
+    # _check_lock serializes every real user of this throwaway db, so a db.lck here
+    # is a leftover from a killed check — without this, checking stays broken until reboot
+    (CHECK_DB / "db.lck").unlink(missing_ok=True)
     proc = _pacman(["-Sy", "--dbpath", str(CHECK_DB), "--logfile", "/dev/null"], timeout=180)
     if proc is None or proc.returncode != 0:
         detail = ((proc.stderr if proc else "") or "").strip()[-200:]
-        raise RuntimeError(f"Could not refresh package databases: {detail or 'no network?'}")
+        raise RuntimeError(f"Could not refresh package databases: {detail or 'timed out (slow mirror or no network?)'}")
     # -Sup resolves exactly like the real -Syu (repo order, IgnorePkg, replaces), so a
     # package held back by the pocknix repo's priority is never reported as updatable —
     # unlike -Qu, which reports any repo's newer version.
