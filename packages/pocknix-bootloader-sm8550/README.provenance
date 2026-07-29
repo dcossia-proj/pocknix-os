@@ -3,12 +3,12 @@
 abl_signed-SM8550.elf is NOT committed here — the PKGBUILD fetches it from the
 official ROCKNIX ABL release, pinned by tag + sha512:
 
-  release:  https://github.com/ROCKNIX/abl/releases/tag/v1.1.5
-  asset:    rocknix-abl-v1.1.5.tar.gz
-  tarball sha512: dffcefb9975880f1e54da3538bac0598b67761af662a4e7365e36c81ba109797
-                  ff44a5d23deea0a4999deae185f5bc24609e4c6037d68fc916ffeaaa6492234e
+  release:  https://github.com/ROCKNIX/abl/releases/tag/v1.1.6
+  asset:    rocknix-abl-v1.1.6.tar.gz
+  tarball sha512: 42f5fd2e261edfd9ffd7b9d262191ae0c50c2419f6768999b075fd745b3e9f8a
+                  9901f1fc62534106f78e10a04cc12acbc85916972ce7febea064d062044a38a9
   abl_signed-SM8550.elf sha256 (release's own sidecar, re-checked in prepare()):
-                  efa890e9000f462ac3f2d74ac2f40a22d82bb7f7645639296977dc638d00876b
+                  edfa5172380a23bbd47890efdd05709b111a6309691fdf941f0cf5fb6d85312a
 
 It is ROCKNIX's patched, test-key-signed build of the Qualcomm ABL (edk2
 LinuxLoader, BSD-3-Clause) for the SM8550 family — the bootloader that scans
@@ -28,8 +28,11 @@ Version coupling: the ABL version ROCKNIX pins for the SoC lives in their
 packages/tools/rocknix-abl/package.mk (PKG_VERSION). Ours (_ablver in the
 PKGBUILD) should track it — the ABL defines the boot contract the sm8550
 profile assumes (FAT label, /KERNEL boot image, board-id dtb select), so a
-mismatched pair is the thing to avoid. v1.1.5 = their pin AND the latest
-release as of 2026-07-23.
+mismatched pair is the thing to avoid. v1.1.6 = their pin AND the latest
+release as of 2026-07-29 (v1.1.6 changes are menu/UI QoL + boot-path fixes:
+forceextboot/alt-volume-up toggles, EFI-path RAM reclaim, distro-agnostic
+uninstall — the qcom-abl boot contract is unchanged; kit scripts unchanged,
+diffed against their tree at this bump).
 
 The kit's job is FIRST INSTALL from stock Android: the user copies
 rocknix_abl/ off the SD's boot FAT to Android internal storage, runs

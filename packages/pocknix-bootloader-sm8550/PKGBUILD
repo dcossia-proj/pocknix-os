@@ -34,7 +34,7 @@
 # ABL and the boot contract above must stay matched), reset pkgrel=1, refresh
 # the tarball sha512.
 pkgname=pocknix-bootloader-sm8550
-_ablver=1.1.5
+_ablver=1.1.6
 pkgver=${_ablver}
 pkgrel=1
 pkgdesc="SM8550 qcom-abl boot payload: ROCKNIX ABL install kit (rocknix_abl)"
@@ -46,7 +46,7 @@ source=("https://github.com/ROCKNIX/abl/releases/download/v${_ablver}/rocknix-ab
         'flash_abl.sh.template'
         'backup_abl.sh'
         'restore_backup_abl.sh')
-sha512sums=('dffcefb9975880f1e54da3538bac0598b67761af662a4e7365e36c81ba109797ff44a5d23deea0a4999deae185f5bc24609e4c6037d68fc916ffeaaa6492234e'
+sha512sums=('42f5fd2e261edfd9ffd7b9d262191ae0c50c2419f6768999b075fd745b3e9f8a9901f1fc62534106f78e10a04cc12acbc85916972ce7febea064d062044a38a9'
             'SKIP'
             'SKIP'
             'SKIP'
