@@ -23,6 +23,7 @@ export function Updater() {
   const [rollingBack, setRollingBack] = useState(false);
   const [rollbackDone, setRollbackDone] = useState(false);
   const [error, setError] = useState("");
+  const [rollbackError, setRollbackError] = useState("");
   const busyRef = useRef(false);
   const running = !!status?.running;
   busyRef.current = checking || running || rollingBack;
@@ -96,13 +97,13 @@ export function Updater() {
 
   const rollBack = async () => {
     if (busyRef.current || !lastSnapshot) return;
-    setError("");
+    setRollbackError("");
     setRollingBack(true);
     try {
       setSnap(await startRollback(lastSnapshot.id));
       setRollbackDone(true);
     } catch (err) {
-      setError(String(err));
+      setRollbackError(String(err));
     } finally {
       setRollingBack(false);
     }
@@ -199,6 +200,7 @@ export function Updater() {
           ) : (
             <Field label="No snapshots yet" description="A snapshot is taken automatically before every update." />
           )}
+          {rollbackError ? <Field label="Rollback error" description={rollbackError} /> : null}
           <Field
             label="Storage"
             description={`${gib(snap.freeBytes)} GB free${snap.lowSpace ? " — LOW: snapshots may be skipped" : ""}`}

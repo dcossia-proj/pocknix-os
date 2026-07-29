@@ -54,7 +54,9 @@ if [ -f "${SNAP_DIR}/${target}/info.json" ] && [ -z "${assume_yes}" ]; then
   case "${a}" in y|Y) ;; *) echo "Cancelled."; exit 0 ;; esac
 fi
 
-# single rollback at a time (mkdir is the atomic lock)
+# single rollback at a time (mkdir is the atomic lock; ensure the tmpfs parent
+# exists first or a fresh boot misreads ENOENT as lock contention)
+mkdir -p "${RUN}"
 mkdir "${RUN}/rollback.lock" 2>/dev/null || die "another rollback is already running"
 cleanup() {
   umount "${TOP}" 2>/dev/null || true
