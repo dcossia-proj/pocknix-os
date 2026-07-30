@@ -41,7 +41,7 @@ cmd_status() {
   echo "running root    : ${mounted:-?}"
   echo "boots next      : ${default:-?} $([ "${mounted}" = "${default}" ] && echo '(same)' || echo '(REBOOT PENDING: differs from running root)')"
   if [ -f /var/lib/pocknix/rollback-info.json ]; then
-    echo "rolled back     : yes (from snapshot $(jq -r '.from_snapshot' /var/lib/pocknix/rollback-info.json), $(jq -r '.ts' /var/lib/pocknix/rollback-info.json))"
+    echo "rolled back     : yes (from snapshot $(jq -r '.from_snapshot' /var/lib/pocknix/rollback-info.json), $(snap_fmt_date "$(jq -r '.ts' /var/lib/pocknix/rollback-info.json)"))"
   fi
   [ -f /run/pocknix/reboot-required ] && echo "reboot required : yes (kernel updated)"
   echo "free space      : $(df -h --output=avail / | tail -1 | tr -d ' ') ($(snap_free_mib) MiB; snapshot floor ${POCKNIX_SNAPSHOT_MIN_FREE_MIB} MiB, UI warning ${POCKNIX_SNAPSHOT_WARN_FREE_MIB} MiB)"
