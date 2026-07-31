@@ -1,0 +1,13 @@
+[Unit]
+Description=pocknix AYN-button dual-screen HUD/blank toggle (dual-screen boards only)
+# Runs for the whole login session, independent of which session (Steam or
+# Plasma) is active on tty1 - it dispatches into whichever is running.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/pocknix-ayn-button
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

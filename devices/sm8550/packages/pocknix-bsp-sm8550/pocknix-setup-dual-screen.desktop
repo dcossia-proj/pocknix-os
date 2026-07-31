@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=pocknix dual-screen layout
+Comment=Lay out the secondary output and pin each touchscreen once the Plasma Mobile session is up (no-op on single-screen boards)
+Exec=/usr/bin/pocknix-setup-dual-screen
+# Only meaningful inside a Plasma session (kscreen-doctor needs the running KScreen daemon),
+# and only after pocknix-desktop-rotate has applied the primary panel's own transform.
+OnlyShowIn=KDE;
+NoDisplay=true
+X-KDE-autostart-phase=2

@@ -51,9 +51,35 @@ native one.
 | AYN Odin 2 | SM8550 | ✅ Supported |
 | AYN Odin 2 Portal | SM8550 | ✅ Supported |
 | AYN Odin 2 Mini | SM8550 | ✅ Supported |
-| AYN Thor | SM8550 | 📋 Planned |
+| AYN Thor | SM8550 | 🧪 Experimental (this fork) — see "This fork" below |
 | Retroid Pocket Nova | SM8550 (QCS8550) | 📋 Planned |
 | AYN Odin 3 | SM8750 | 📋 Planned |
+
+## This fork
+
+This fork (`dcossia-proj/pocknix-os`) brings up the **AYN Thor** ahead of upstream, reusing
+work already proven on [`armada`](https://github.com/dcossia-proj/armada) — a sibling
+ostree/bootc-based distro for the same board, which carries most of the same Thor kernel
+fixes and was the source for several of the additions below:
+
+- **Second screen** — the bottom OLED panel is enabled in-kernel already (synced from ROCKNIX);
+  this fork adds the touchscreen coordinate fix (`kernel/sm8550/dts/qcom/qcs8550-ayn-thor.dts`,
+  see `kernel/README.md`), the `thor` board profile
+  (`devices/sm8550/packages/pocknix-bsp-sm8550/boards/thor.conf`), and the desktop-session
+  dual-screen layout (`pocknix-setup-dual-screen`).
+- **AYN button** — tap toggles a full-stats MangoHud overlay on the bottom screen while gaming
+  (`pocknix-hud-bottom`, fixed to be truly fullscreen and fully opaque — see that file's header
+  for what was wrong before); holding it blanks/unblanks the bottom panel outright, in either
+  session (`pocknix-ayn-button`).
+- **Stick RGB lighting** — the HTR3212 driver for both analog sticks is already fully described
+  in the synced Thor DTS; this fork adds the userspace side (a Lighting tab in Pocknix Control)
+  ported from the full-featured implementation `armada` merged in from an external PR, not the
+  earlier, more limited standalone plugin it replaced.
+
+All of the above is new/adapted and **UNVERIFIED ON HARDWARE** unless a file says otherwise —
+this fork follows the same convention as the retired per-device board confs (see
+`devices/README.md`) for exactly this reason. If you have a Thor, feedback on what's wrong is
+extremely welcome.
 
 ## The kernel
 

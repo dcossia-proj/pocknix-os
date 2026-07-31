@@ -293,6 +293,11 @@ EOF
   # Emulation first-login seeding: ~/ROMs tree + ES-DE/RetroArch/SRM configs (pocknix-emulation;
   # idempotent oneshot, never blocks the session).
   chroot "${root}" systemctl --global enable pocknix-roms-init.service >/dev/null 2>&1 || true
+  # AYN-button dual-screen handler (pocknix-bsp-sm8550): safe to enable on every board — it reads
+  # POCKNIX_SECONDARY_CONNECTOR from device.conf and exits immediately on single-screen boards.
+  # pocknix-hud-bottom.service is deliberately NOT enabled here: it is started/stopped on demand by
+  # pocknix-ayn-button, not run continuously.
+  chroot "${root}" systemctl --global enable pocknix-ayn-button.service >/dev/null 2>&1 || true
 }
 
 main() {

@@ -1,0 +1,92 @@
+#!/usr/bin/bash
+# pocknix-hud-bottom — full-stats MangoApp on the bottom screen of dual-screen
+# boards (currently: Thor), toggled by a tap of the AYN button
+# (pocknix-ayn-button) while the Steam/gamescope session is active.
+#
+# Ported from armada's hud-bottom (this fork's sibling project), fixing two
+# bugs reported against armada's version: the HUD was neither truly
+# fullscreen nor opaque there. Root causes addressed here:
+#   1. Opacity: mangohud-bottom.conf's background_alpha was 0.8, not 1 - see
+#      that file.
+#   2. Fullscreen: armada pinned the window with a STATIC kwinrulesrc entry
+#      (hardcoded position=226,720 and screen=0) - stale the moment the
+#      secondary output's actual geometry or KWin's screen ordinal differs
+#      from what was hardcoded at authoring time. This script instead
+#      queries the LIVE secondary-output geometry via kscreen-doctor (same
+#      technique pocknix-setup-dual-screen already uses) and (re)writes the
+#      window rule immediately before every launch, with explicit
+#      position+size (not just fullscreenrule) sized exactly to that output.
+set -euo pipefail
+
+for dc in /usr/lib/pocknix/device.conf /etc/pocknix/device.conf; do
+  [ -r "$dc" ] && . "$dc"
+done
+
+connector="${POCKNIX_SECONDARY_CONNECTOR:-}"
+[ -n "$connector" ] || exit 0  # single-screen board: nothing to do
+
+have() { command -v "$1" >/dev/null 2>&1; }
+for tool in kscreen-doctor jq kwriteconfig6 mangoapp; do
+  have "$tool" || { echo "pocknix-hud-bottom: missing required tool: $tool" >&2; exit 1; }
+done
+
+# The desktop DISPLAY comes from the user manager environment; without it
+# there's nowhere to draw yet (mirrors armada's hud-bottom guard).
+[ -n "${DISPLAY:-}" ] || exit 1
+
+outputs_json="$(kscreen-doctor -o -j 2>/dev/null)" || { echo "pocknix-hud-bottom: kscreen-doctor query failed" >&2; exit 1; }
+
+# Logical (post-scale, post-rotation) width/height/position of the secondary
+# output, plus its ordinal among currently listed outputs (best-effort proxy
+# for KWin's rule "screen" index - CONFIRM on hardware; if the HUD lands on
+# the wrong screen, this mapping needs revisiting).
+read -r out_w out_h out_x out_y out_idx <<EOF
+$(printf '%s' "$outputs_json" | jq -r --arg name "$connector" '
+  (.outputs | to_entries[] | select(.value.name == $name)) as $e
+  | $e.value as $o
+  | ($o.modes[] | select((.id|tostring) == ($o.currentModeId|tostring))) as $m
+  | ($o.scale // 1) as $s
+  | (if ($o.rotation == 2 or $o.rotation == 8)
+     then [$m.size.height, $m.size.width] else [$m.size.width, $m.size.height] end) as $wh
+  | "\(($wh[0]/$s)|round) \(($wh[1]/$s)|round) \($o.pos.x // 0) \($o.pos.y // 0) \($e.key)"
+')
+EOF
+
+if [ -z "${out_w:-}" ] || [ "$out_w" = "null" ]; then
+  echo "pocknix-hud-bottom: couldn't resolve geometry for output '$connector'" >&2
+  exit 1
+fi
+
+# Force the mangoapp overlay window onto that exact rectangle. Rewritten on
+# every launch so a resolution/topology change never leaves a stale rule
+# behind (same "computed, not hardcoded" pattern pocknix-desktop-rotate and
+# pocknix-setup-dual-screen already use).
+kwriteconfig6 --file kwinrulesrc --group General --key count 1
+kwriteconfig6 --file kwinrulesrc --group General --key rules pocknix-hud-bottom
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key Description "Pin the bottom-screen HUD fullscreen on the secondary output"
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key wmclass "mangoapp overlay window"
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key wmclassmatch 1
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key wmclasscomplete false
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key acceptfocus false
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key acceptfocusrule 2
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key above true
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key aboverule 2
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key skiptaskbar true
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key skiptaskbarrule 2
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key screen "$out_idx"
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key screenrule 4
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key position "${out_x},${out_y}"
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key positionrule 4
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key size "${out_w}x${out_h}"
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key sizerule 4
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key fullscreen true
+kwriteconfig6 --file kwinrulesrc --group pocknix-hud-bottom --key fullscreenrule 4
+qdbus6 org.kde.KWin /KWin reconfigure 2>/dev/null || true
+
+# Land on the desktop Xwayland: GLFW would pick host Wayland otherwise, and
+# mangoapp's window hints are X11-only.
+export XDG_SESSION_TYPE=x11
+unset WAYLAND_DISPLAY
+
+export MANGOHUD_CONFIGFILE=/usr/share/pocknix/mangohud-bottom.conf
+exec mangoapp

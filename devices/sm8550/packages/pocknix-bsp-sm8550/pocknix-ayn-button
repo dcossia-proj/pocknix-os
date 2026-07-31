@@ -1,0 +1,175 @@
+#!/usr/bin/python3
+"""AYN-button daemon for dual-screen boards (currently: Thor).
+
+A tap toggles the bottom-screen performance HUD (pocknix-hud-bottom.service),
+only while the Steam/gamescope session is the active one - the HUD only means
+something while gaming. A long press (>=600ms) blanks/unblanks the bottom
+OLED panel outright (real power-off via KScreen, not an overlay window),
+regardless of session - useful in desktop mode too. No-op entirely on boards
+without POCKNIX_AYN_BUTTON_DEV / POCKNIX_SECONDARY_CONNECTOR set.
+
+Ported from armada's hud-toggle-listener + hud-toggle + bottom-screen-toggle
+(this fork's sibling project). armada split tap/hold across three shell
+scripts driven by evtest text parsing; python-evdev (already a pocknix base
+package) reads EV_KEY events with real timestamps directly, so this is one
+process instead of three.
+
+Runs as a --user unit (pocknix-ayn-button.service) for the whole login
+session, independent of which session (Steam or Plasma) is active on tty1 -
+matches the existing pocknix-bsp-common inputplumber-sleep-* convention of
+per-user daemons that outlive session switches.
+"""
+import glob
+import os
+import subprocess
+import sys
+import time
+
+try:
+    import evdev
+except ImportError:
+    evdev = None
+
+HOLD_THRESHOLD_S = 0.6
+DEVICE_CONF_PATHS = ("/usr/lib/pocknix/device.conf", "/etc/pocknix/device.conf")
+
+
+def device_env():
+    env = {}
+    for path in DEVICE_CONF_PATHS:
+        try:
+            with open(path) as f:
+                lines = f.readlines()
+        except OSError:
+            continue
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            if not key.startswith("POCKNIX_"):
+                continue
+            env[key] = value.strip().strip('"').strip("'")
+    return env
+
+
+def find_device(name_substr):
+    for path in evdev.list_devices():
+        try:
+            dev = evdev.InputDevice(path)
+        except OSError:
+            continue
+        if name_substr in dev.name or name_substr in path:
+            return dev
+    return None
+
+
+def run(*args, **kw):
+    return subprocess.run(args, check=False, capture_output=True, text=True, **kw)
+
+
+def gaming_session_active():
+    # pocknix-steam execs gamescope directly on tty1; its presence is the
+    # simplest "are we in the Steam session" signal, matching the reasoning
+    # in armada's hud-toggle ("The HUDs only mean something while gaming
+    # mode is up").
+    return run("pgrep", "-x", "gamescope").returncode == 0
+
+
+def toggle_hud():
+    if not gaming_session_active():
+        return
+    unit = "pocknix-hud-bottom.service"
+    if run("systemctl", "--user", "--quiet", "is-active", unit).returncode == 0:
+        run("systemctl", "--user", "stop", unit)
+    else:
+        run("systemctl", "--user", "reset-failed", unit)
+        run("systemctl", "--user", "start", unit)
+
+
+def _touchscreen_event_path(name):
+    for sysdir in glob.glob("/sys/class/input/input*"):
+        try:
+            if open(f"{sysdir}/name").read().strip() != name:
+                continue
+            event = next(e for e in glob.glob(f"{sysdir}/event*"))
+        except (OSError, StopIteration):
+            continue
+        return f"/sys/class/input/{os.path.basename(event)}/inhibited"
+    return None
+
+
+def _set_touchscreen_inhibit(name, inhibited):
+    path = _touchscreen_event_path(name)
+    if not path or not os.path.exists(path):
+        return  # older kernel without the per-device 'inhibited' sysfs attribute; skip
+    try:
+        with open(path, "w") as f:
+            f.write("1" if inhibited else "0")
+    except OSError as exc:
+        print(f"pocknix-ayn-button: couldn't set {path}: {exc}", file=sys.stderr)
+
+
+def toggle_bottom_screen(env):
+    connector = env.get("POCKNIX_SECONDARY_CONNECTOR")
+    if not connector:
+        return
+    state_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    state_file = f"{state_dir}/pocknix-bottom-screen-blanked"
+    touchscreen = env.get("POCKNIX_SECONDARY_TOUCHSCREEN")
+
+    if os.path.exists(state_file):
+        run("kscreen-doctor", f"output.{connector}.enable")
+        os.remove(state_file)
+        if touchscreen:
+            _set_touchscreen_inhibit(touchscreen, False)
+        # KScreen is expected to restore this output's persisted position/
+        # scale/rotation on its own; re-run the full layout as a fallback in
+        # case it doesn't (same belt-and-braces armada used).
+        run("/usr/bin/pocknix-setup-dual-screen")
+    else:
+        if touchscreen:
+            _set_touchscreen_inhibit(touchscreen, True)
+        run("kscreen-doctor", f"output.{connector}.disable")
+        open(state_file, "w").close()
+
+
+def main():
+    if evdev is None:
+        print("pocknix-ayn-button: python-evdev not installed", file=sys.stderr)
+        return 1
+
+    env = device_env()
+    key = env.get("POCKNIX_AYN_BUTTON_KEY")
+    dev_hint = env.get("POCKNIX_AYN_BUTTON_DEV")
+    if not key or not dev_hint or not env.get("POCKNIX_SECONDARY_CONNECTOR"):
+        return 0  # single-screen board or no AYN button configured: nothing to do
+
+    dev = find_device(dev_hint)
+    if dev is None:
+        print(f"pocknix-ayn-button: no input device matching {dev_hint!r} found",
+              file=sys.stderr)
+        return 1
+
+    keycode = key if key.startswith("KEY_") else f"KEY_{key}"
+    down_time = None
+    for event in dev.read_loop():
+        if event.type != evdev.ecodes.EV_KEY:
+            continue
+        if evdev.ecodes.KEY[event.code] != keycode:
+            continue
+        if event.value == 1:  # down
+            down_time = event.timestamp()
+        elif event.value == 0 and down_time is not None:  # up
+            held = event.timestamp() - down_time
+            down_time = None
+            if held >= HOLD_THRESHOLD_S:
+                toggle_bottom_screen(env)
+            else:
+                toggle_hud()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

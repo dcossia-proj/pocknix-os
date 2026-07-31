@@ -25,6 +25,18 @@ ROCKNIX work**, not ours:
   `jaewun/ROCKNIX` `thor-suspend-fixes`; we merge/maintain it.
 - **Our delta** (small) — TSENS uplow-wake broadening (`0203`), `CONFIG_PM_SLEEP_DEBUG`, and
   the SDAM breadcrumb debug hooks.
+- **AYN Thor touchscreen coordinate fix** (`dts/qcom/qcs8550-ayn-thor.dts`) — the synced ROCKNIX
+  DTS carries `touchscreen-swapped-x-y` + `touchscreen-inverted-x` on both `top_touchscreen` and
+  `bottom_touchscreen`, which produces mirrored/rotated touch coordinates on real hardware. Removed
+  on both nodes. Carried over from the same fix already validated on the `armada` distro's Thor
+  kernel (`armada-packages/kernel/dts/qcs8550-ayn-thor.dts.patch`). Re-verify after every `make
+  sync`: a future ROCKNIX nightly could reintroduce these properties or fix them upstream, either
+  of which would make this delta stale.
+- **AYN Thor bottom panel** — `&mdss_dsi0`/`&mdss_dsi0_phy` already ship `status = "okay"` in the
+  synced tree, i.e. the second screen is kernel-enabled as-is; no delta needed there. The RGB stick
+  LEDs (`htr3212l`/`htr3212r`, `heroic,htr3212` driver, patch `0033`) are likewise already fully
+  described — no kernel delta needed for lighting either, only the userspace driver (see
+  `devices/sm8550/packages/pocknix-bsp-sm8550/`).
 
 What's committed here is a **pinned snapshot of ROCKNIX `next` (nightly)** + jaewun's branch +
 our delta — taken from the maintainer's `distribution/` fork (branch `thor-suspend-merge`).

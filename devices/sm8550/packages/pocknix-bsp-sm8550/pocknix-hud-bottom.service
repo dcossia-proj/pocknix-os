@@ -1,0 +1,10 @@
+[Unit]
+Description=pocknix bottom-screen performance HUD (dual-screen boards only)
+# Toggled by pocknix-ayn-button (tap, while the Steam/gamescope session is
+# active) via start/stop - not enabled by default.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/pocknix-hud-bottom
+Restart=on-failure
+RestartSec=1

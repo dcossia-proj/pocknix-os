@@ -16,8 +16,8 @@ dispatcher is invisible to them; `/etc/pocknix/device.conf` still overrides.
 
 Current families:
 
-* **sm8550** (qcom-abl): Retroid Pocket 6 (+TOP-DPAD), AYN Odin 2 / Mini / Portal —
-  one RSInput controller config for all boards.
+* **sm8550** (qcom-abl): Retroid Pocket 6 (+TOP-DPAD), AYN Odin 2 / Mini / Portal, AYN Thor
+  (this fork only, experimental) — one RSInput controller config for all boards.
 * **sm8250** (arm-efi): Retroid Pocket 5, Retroid Pocket Flip 2 (Flip 2 hardware-unverified).
 
 Adding a **board to an existing family**: a `boards/<board>.conf` + a dispatcher case
@@ -93,6 +93,9 @@ Sourced by shared session scripts (`pocknix-steam`, `pocknix-desktop-rotate`,
 | `POCKNIX_BOOT_STYLE` | pocknix-install/uninstall-internal | qcom-abl (default) or arm-efi: selects the internal-install boot-file handling (arm-efi pins grub.cfg + fstab to internal PARTUUIDs) |
 | `POCKNIX_INTERNAL_DISK` | pocknix-install/uninstall-internal, installer-gui | internal disk (default /dev/sda) |
 | `POCKNIX_BOOT_GPT_NAME/_FAT_LABEL`, `POCKNIX_ROOT_LABEL` | pocknix-install/uninstall-internal | internal-install boot contract |
+| `POCKNIX_PRIMARY_CONNECTOR/_BACKLIGHT/_TOUCHSCREEN` | pocknix-setup-dual-screen, pocknix-hud-bottom | (dual-screen boards only) the gaming-session output's connector/backlight/touchscreen identity, distinct from the secondary once a board has more than one screen |
+| `POCKNIX_SECONDARY_CONNECTOR/_ORIENTATION/_TOUCHSCREEN`, `POCKNIX_SECONDARY_PANEL_W/H` | pocknix-setup-dual-screen, pocknix-ayn-button, pocknix-hud-bottom | (dual-screen boards only) the second output's facts. Unset on every single-screen board, and every consumer no-ops when it's unset — this is the whole gate for all dual-screen behavior |
+| `POCKNIX_AYN_BUTTON_DEV/_KEY` | pocknix-ayn-button | (dual-screen boards only) the evdev device name substring + `linux,code` name for the button that toggles the bottom HUD (tap) / blanks the bottom panel (hold) |
 
 Every consumer falls back to the RP6 values when a key (or the whole file) is absent, so
 a missing/partial device.conf degrades to known-good behavior instead of breaking.
