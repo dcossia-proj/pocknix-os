@@ -1,5 +1,5 @@
 import { call } from "@decky/api";
-import type { Config, SdcardInfo, SnapshotStatus, Tweaks, UpdateInfo, UpdateStatus } from "./types";
+import type { Config, SdcardInfo, SnapshotStatus, StickLed, Tweaks, UpdateInfo, UpdateStatus } from "./types";
 
 export const getConfig = () => call<[], Config>("get_config");
 export const setFanMode = (mode: string) => call<[string], Config>("set_fan_mode", mode);
@@ -13,3 +13,8 @@ export const updateStatus = () => call<[], UpdateStatus>("update_status");
 export const snapshotStatus = () => call<[], SnapshotStatus>("snapshot_status");
 export const startRollback = (id: string) => call<[string], SnapshotStatus>("start_rollback", id);
 export const rebootSystem = () => call<[], boolean>("reboot_system");
+export const setStickLedColor = (value: string) => call<[string], StickLed>("set_stick_led_color", value);
+export const setStickLedMode = (mode: string) => call<[string], StickLed>("set_stick_led_mode", mode);
+export const setStickLedScreenLink = (enabled: boolean) => call<[boolean], StickLed>("set_stick_led_screen_link", enabled);
+export const setStickLedParam = (param: string, mode: string, value: number) => call<[string, string, number], StickLed>("set_stick_led_param", param, mode, value);
+export const setStickLedFlashColor = (button: string, value: string) => call<[string, string], StickLed>("set_stick_led_flash_color", button, value);

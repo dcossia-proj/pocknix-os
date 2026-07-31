@@ -7,11 +7,13 @@
 #
 # Ships under /usr/share; pocknix-decky-sync.service seeds/updates deck's ~/homebrew at boot
 # (version-compared so Decky's self-updates are never downgraded) and re-copies the
-# PocknixControl plugin (OS-owned system UI: fan curve / scx_lavd mode / per-game FEX profile).
+# PocknixControl plugin (OS-owned system UI: fan curve / scx_lavd mode / per-game FEX profile,
+# and now a Lighting tab for the HTR3212 analog-stick RGB — see stick-led-color in
+# pocknix-bsp-sm8550 — hardware-gated, hidden entirely on boards without it).
 # The plugin frontend (dist/index.js) is prebuilt and committed — no node at package build time.
 pkgname=pocknix-decky
 pkgver=0.1.0
-pkgrel=8
+pkgrel=9
 pkgdesc="Decky Loader (under FEX, namespaced binfmt) + Pocknix Control QAM plugin"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"

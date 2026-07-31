@@ -28,6 +28,15 @@ export interface GameRef {
   nonSteam?: boolean;
 }
 
+export interface StickLed {
+  supported: boolean;
+  mode: string;
+  color: string;
+  screenLink: boolean;
+  params: Record<string, number>;
+  flashColors: Record<string, string>;
+}
+
 export interface Config {
   fanMode: string;
   lavdMode: string;
@@ -36,6 +45,7 @@ export interface Config {
   installedGames: InstalledGame[];
   game?: GameRef | null;
   selectedGame?: GameRef | null;
+  stickLed: StickLed;
 }
 
 export interface DropdownChoice {

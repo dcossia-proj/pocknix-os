@@ -1,0 +1,15 @@
+#!/bin/sh
+# pocknix-sleep pre hook: blank the stick RGB LEDs before suspend and stop the
+# daemon, matching the 001-inputplumber hook's stop-before/restart-after
+# pattern. A flag records that we actually stopped it, so the post hook only
+# restarts it if it was running (doesn't start it if disabled or the board
+# has no HTR3212 hardware, in which case the unit's ConditionPathExists
+# already keeps it inactive).
+FLAG=/run/pocknix-stick-led-resume
+
+if systemctl is-active --quiet pocknix-stick-led.service; then
+  /usr/bin/stick-led-color off 2>/dev/null || true
+  : > "${FLAG}"
+  systemctl stop pocknix-stick-led.service
+fi
+exit 0

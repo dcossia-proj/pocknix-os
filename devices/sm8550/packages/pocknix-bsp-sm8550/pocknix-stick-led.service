@@ -1,0 +1,12 @@
+[Unit]
+Description=pocknix analog-stick RGB lighting (HTR3212)
+ConditionPathExists=/sys/class/leds/l:r1
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/stick-led-color daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

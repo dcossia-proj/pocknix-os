@@ -1,0 +1,11 @@
+#!/bin/sh
+# pocknix-sleep post hook: restart the stick RGB daemon if the pre hook
+# stopped it (see 002-stick-led-sleep-pre). It re-applies the saved
+# mode/color itself on startup, so nothing else to restore here.
+FLAG=/run/pocknix-stick-led-resume
+
+if [ -e "${FLAG}" ]; then
+  rm -f "${FLAG}"
+  systemctl start pocknix-stick-led.service
+fi
+exit 0

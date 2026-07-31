@@ -7,6 +7,7 @@ import { tabIcons } from "./icons";
 import { currentGame } from "./lib/games";
 import { styles } from "./styles";
 import { Games } from "./tabs/Games";
+import { Lighting } from "./tabs/Lighting";
 import { Power } from "./tabs/Power";
 import { Storage } from "./tabs/Storage";
 import { Updater } from "./tabs/Updater";
@@ -70,6 +71,9 @@ export function Content() {
         tabs={[
           { id: "Games", title: tabIcons.Games, content: tabContent(<Games config={config} setConfig={setConfig} />) },
           { id: "Power", title: tabIcons.Power, content: tabContent(<Power config={config} setConfig={setConfig} reload={load} />) },
+          ...(config.stickLed?.supported
+            ? [{ id: "Lighting", title: tabIcons.Lighting, content: tabContent(<Lighting config={config} setConfig={setConfig} />) }]
+            : []),
           { id: "Storage", title: tabIcons.Storage, content: tabContent(<Storage />) },
           { id: "Updater", title: tabIcons.Updater, content: tabContent(<Updater />) },
         ]}

@@ -172,7 +172,11 @@ EOF
   # gamescope-rt (RRs the compositor from root — the deck session has no rtprio grant, the
   # SteamOS model; see limits.d/60-pocknix-gaming.conf. Replaces the old rt-demote watcher).
   chroot "${root}" systemctl enable pocknix-fancontrol.service pocknix-fex-binfmt.service \
-        pocknix-volumed.service pocknix-gamescope-rt.service pocknix-powerd.service 2>/dev/null || true
+        pocknix-volumed.service pocknix-gamescope-rt.service pocknix-powerd.service \
+        pocknix-stick-led.service 2>/dev/null || true
+  # pocknix-stick-led.service: safe to enable on every board — its own
+  # ConditionPathExists=/sys/class/leds/l:r1 keeps it inactive on hardware
+  # without the HTR3212 stick RGB controller (currently RP6 and Thor).
   # Decky Loader (QAM plugins, incl. Pocknix Control): seed deck's ~/homebrew at boot, then run
   # the loader under FEX in its private-binfmt namespace (see packages/pocknix-decky).
   chroot "${root}" systemctl enable pocknix-decky-sync.service pocknix-decky-loader.service 2>/dev/null || true

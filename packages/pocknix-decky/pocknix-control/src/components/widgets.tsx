@@ -1,4 +1,4 @@
-import { Dropdown, DropdownItem, PanelSectionRow } from "@decky/ui";
+import { Dropdown, DropdownItem, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
 import type { ReactNode } from "react";
 import type { DropdownChoice } from "../types";
 
@@ -18,6 +18,45 @@ export function SelectEdit({ label, value, options, onChange }: {
       ) : (
         <DropdownItem label={label} selectedOption={value} rgOptions={rgOptions} onChange={(option) => onChange(option.data)} />
       )}
+    </PanelSectionRow>
+  );
+}
+
+export function ToggleRow({ label, value, onChange, disabled, description }: {
+  label: ReactNode;
+  value: any;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+  description?: ReactNode;
+}) {
+  return (
+    <PanelSectionRow>
+      <ToggleField label={label} description={description} checked={!!value} disabled={disabled} onChange={onChange} />
+    </PanelSectionRow>
+  );
+}
+
+export function SliderEdit({ label, value, min, max, step, onChange, format }: {
+  label: ReactNode;
+  value: any;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: any) => void;
+  format?: (value: number) => any;
+}) {
+  const numeric = Number(value);
+  return (
+    <PanelSectionRow>
+      <SliderField
+        label={label}
+        value={Number.isFinite(numeric) ? numeric : min}
+        min={min}
+        max={max}
+        step={step}
+        showValue
+        onChange={(next) => onChange(format ? format(next) : next)}
+      />
     </PanelSectionRow>
   );
 }

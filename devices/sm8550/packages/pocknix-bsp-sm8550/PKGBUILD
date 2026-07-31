@@ -22,6 +22,16 @@
 #     while gaming, hold = blank/unblank the bottom panel
 #   * pocknix-hud-bottom(.service), mangohud-bottom.conf — the bottom-screen
 #     performance HUD itself
+#
+# Hardware-gated (not board-gated) at runtime by ConditionPathExists=/sys/
+# class/leds/l:r1 — currently RP6 and Thor:
+#   * stick-led-color, pocknix-stick-led.service — analog-stick RGB daemon
+#     (10 modes incl. reactive/ambilight), also ported from armada: the
+#     full-featured implementation merged there from an external PR, not
+#     the earlier, more limited standalone plugin (thorgb) it replaced.
+#     Driven by Pocknix Control's Lighting tab (packages/pocknix-decky).
+#   * 002-stick-led-sleep-{pre,post} — pocknix-sleep hooks: blank + stop
+#     before suspend, restart after resume (see pocknix-bsp-common).
 pkgname=pocknix-bsp-sm8550
 pkgver=0.3.0
 pkgrel=1
@@ -37,7 +47,8 @@ provides=('pocknix-bsp')
 conflicts=('pocknix-bsp')
 replaces=('pocknix-bsp' 'pocknix-bsp-rp6' 'pocknix-bsp-odin2' 'pocknix-bsp-odin2mini' 'pocknix-bsp-odin2portal')
 optdepends=('inputplumber: gamepad -> Steam Input mapping (01-rsinput-controller.yaml)'
-            'alsa-ucm-conf: base UCM (codec include sequences for the AYN-Odin2 UCM)')
+            'alsa-ucm-conf: base UCM (codec include sequences for the AYN-Odin2 UCM)'
+            'ffmpeg: stick-led-color ambilight mode (kmsgrab screen sampling) — every other mode works without it')
 # NOTE: the spurious deep-sleep wake is FIXED in the kernel — kernel/sm8550/patches/20-sm8550/
 # 0502-wakeup-qcom-ipcc-remove-IRQF-NO-SUSPEND.patch masks the IPCC mailbox during suspend.
 # See docs/archive/sm8550-suspend-wake-report.md.
@@ -48,9 +59,12 @@ source=('device.conf'
         'kernel-cmdline'
         'pocknix-setup-dual-screen' 'pocknix-setup-dual-screen.desktop'
         'pocknix-ayn-button' 'pocknix-ayn-button.service'
-        'pocknix-hud-bottom' 'pocknix-hud-bottom.service' 'mangohud-bottom.conf')
+        'pocknix-hud-bottom' 'pocknix-hud-bottom.service' 'mangohud-bottom.conf'
+        'stick-led-color' 'pocknix-stick-led.service'
+        '002-stick-led-sleep-pre' '002-stick-led-sleep-post')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
-            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
+            'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   # Runtime device facts: the model dispatcher + per-board files. boards/ is
@@ -108,4 +122,13 @@ package() {
   install -Dm644 "${srcdir}/pocknix-hud-bottom.service" \
     "${pkgdir}/usr/lib/systemd/user/pocknix-hud-bottom.service"
   install -Dm644 "${srcdir}/mangohud-bottom.conf" "${pkgdir}/usr/share/pocknix/mangohud-bottom.conf"
+
+  # Analog-stick RGB (hardware-gated, not board-gated — see the header).
+  install -Dm755 "${srcdir}/stick-led-color" "${pkgdir}/usr/bin/stick-led-color"
+  install -Dm644 "${srcdir}/pocknix-stick-led.service" \
+    "${pkgdir}/usr/lib/systemd/system/pocknix-stick-led.service"
+  install -Dm755 "${srcdir}/002-stick-led-sleep-pre" \
+    "${pkgdir}/usr/lib/pocknix/sleep.d/pre/002-stick-led"
+  install -Dm755 "${srcdir}/002-stick-led-sleep-post" \
+    "${pkgdir}/usr/lib/pocknix/sleep.d/post/002-stick-led"
 }

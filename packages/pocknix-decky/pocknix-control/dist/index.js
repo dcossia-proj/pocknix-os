@@ -36,6 +36,11 @@ const updateStatus = () => call("update_status");
 const snapshotStatus = () => call("snapshot_status");
 const startRollback = (id) => call("start_rollback", id);
 const rebootSystem = () => call("reboot_system");
+const setStickLedColor = (value) => call("set_stick_led_color", value);
+const setStickLedMode = (mode) => call("set_stick_led_mode", mode);
+const setStickLedScreenLink = (enabled) => call("set_stick_led_screen_link", enabled);
+const setStickLedParam = (param, mode, value) => call("set_stick_led_param", param, mode, value);
+const setStickLedFlashColor = (button, value) => call("set_stick_led_flash_color", button, value);
 
 function useDebouncedSave(options) {
     const { config, field, snapshot, save, setConfig, onError, delay = 900 } = options;
@@ -90,6 +95,7 @@ const tabIcons = {
     Power: (SP_JSX.jsx(Icon, { path: SP_JSX.jsx(SP_JSX.Fragment, { children: SP_JSX.jsx("path", { d: "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" }) }) })),
     Updater: (SP_JSX.jsx(Icon, { path: SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx("path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }), SP_JSX.jsx("polyline", { points: "7 10 12 15 17 10" }), SP_JSX.jsx("line", { x1: "12", x2: "12", y1: "15", y2: "3" })] }) })),
     Storage: (SP_JSX.jsx(Icon, { path: SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx("line", { x1: "22", x2: "2", y1: "12", y2: "12" }), SP_JSX.jsx("path", { d: "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" }), SP_JSX.jsx("line", { x1: "6", x2: "6.01", y1: "16", y2: "16" }), SP_JSX.jsx("line", { x1: "10", x2: "10.01", y1: "16", y2: "16" })] }) })),
+    Lighting: (SP_JSX.jsx(Icon, { path: SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx("path", { d: "M15 14c.2-1 .7-1.7 1.5-2.5A5.5 5.5 0 0 0 18 8a6 6 0 0 0-12 0c0 1.5.5 2.7 1.5 3.5.8.8 1.3 1.5 1.5 2.5" }), SP_JSX.jsx("path", { d: "M9 18h6" }), SP_JSX.jsx("path", { d: "M10 22h4" })] }) })),
 };
 
 function gameDisplayName(game) {
@@ -293,6 +299,13 @@ function SelectEdit({ label, value, options, onChange }) {
     const rgOptions = options.map((option) => (typeof option === "string" ? { data: option, label: option } : option));
     return (SP_JSX.jsx(DFL.PanelSectionRow, { children: label === undefined ? (SP_JSX.jsx(DFL.Dropdown, { selectedOption: value, rgOptions: rgOptions, onChange: (option) => onChange(option.data) })) : (SP_JSX.jsx(DFL.DropdownItem, { label: label, selectedOption: value, rgOptions: rgOptions, onChange: (option) => onChange(option.data) })) }));
 }
+function ToggleRow({ label, value, onChange, disabled, description }) {
+    return (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: label, description: description, checked: !!value, disabled: disabled, onChange: onChange }) }));
+}
+function SliderEdit({ label, value, min, max, step, onChange, format }) {
+    const numeric = Number(value);
+    return (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.SliderField, { label: label, value: Number.isFinite(numeric) ? numeric : min, min: min, max: max, step: step, showValue: true, onChange: (next) => onChange(format ? format(next) : next) }) }));
+}
 
 function clone(obj) {
     return JSON.parse(JSON.stringify(obj));
@@ -363,6 +376,183 @@ function Games({ config, setConfig }) {
     const storedLatency = String(values.audioLatency ?? "");
     const audioValue = audioLatencyOptions.some((option) => option.data === storedLatency) ? storedLatency : "";
     return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "GAME TWEAKS", children: [SP_JSX.jsx(SelectEdit, { label: "Game", value: game?.appid || "", options: editTargetOptions(config), onChange: setSelectedGame }), SP_JSX.jsx("div", { className: "pocknix-note", children: "Changes apply on next game launch" }), !editingDefault ? SP_JSX.jsx(DFL.ToggleField, { label: "Use Per-Game Settings", checked: perGameEnabled, onChange: setPerGameEnabled }) : null, editingDefault || perGameEnabled ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(SelectEdit, { label: "FEX Preset", value: fexValue, options: fexOptions, onChange: (id) => patchSettings({ fexProfile: id }) }), SP_JSX.jsx(SelectEdit, { label: "Audio Buffer", value: audioValue, options: audioLatencyOptions, onChange: (id) => patchSettings({ audioLatency: id }) })] })) : null] }), SP_JSX.jsx(AddGameSection, {})] }));
+}
+
+// Ported from armada's decky/armada-control/src/tabs/Settings.tsx "Stick
+// Lighting" panel (this fork's sibling project) - the full-featured
+// implementation merged there from an external PR (Ga1dz1/armada), not the
+// earlier, more limited standalone plugin (thorgb) it replaced. Hardware-
+// gated by config.stickLed.supported (checks /sys/class/leds/l:r1), so this
+// tab renders empty on boards without the HTR3212 stick RGB controller.
+const PRESET_COLORS = [
+    { label: "Blue", value: "0050FF" },
+    { label: "Purple", value: "8000FF" },
+    { label: "Red", value: "FF0000" },
+    { label: "Green", value: "00FF00" },
+    { label: "White", value: "FFFFFF" },
+    { label: "Off", value: "000000" },
+];
+function hexToRgb(hex) {
+    const clean = /^[0-9A-Fa-f]{6}$/.test(hex) ? hex : "0050FF";
+    return [parseInt(clean.slice(0, 2), 16), parseInt(clean.slice(2, 4), 16), parseInt(clean.slice(4, 6), 16)];
+}
+function rgbToHex(r, g, b) {
+    const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)));
+    return [clamp(r), clamp(g), clamp(b)].map((n) => n.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+const MODE_OPTIONS = [
+    { data: "static", label: "Static" },
+    { data: "breathing", label: "Breathing" },
+    { data: "battery", label: "Battery" },
+    { data: "battery-breathing", label: "Battery + Breathing" },
+    { data: "rainbow", label: "Rainbow" },
+    { data: "chase", label: "Chase" },
+    { data: "alternating", label: "Alternating (L/R)" },
+    { data: "reactive", label: "Reactive (sticks + buttons)" },
+    { data: "multidot", label: "Multidot (RGB chase)" },
+    { data: "ambilight", label: "Ambilight (matches screen)" },
+];
+const COLOR_VISIBLE_MODES = new Set(["static", "breathing", "chase", "alternating"]);
+const FLASH_BUTTON_OPTIONS = [
+    { data: "south", label: "South" },
+    { data: "east", label: "East" },
+    { data: "north", label: "North" },
+    { data: "west", label: "West" },
+    { data: "l1", label: "L1" },
+    { data: "r1", label: "R1" },
+    { data: "l3", label: "L3 (left stick click)" },
+    { data: "r3", label: "R3 (right stick click)" },
+    { data: "l4", label: "L4 (left paddle)" },
+    { data: "r4", label: "R4 (right paddle)" },
+    { data: "start", label: "Start" },
+    { data: "select", label: "Select" },
+    { data: "dpad_up", label: "D-Pad Up" },
+    { data: "dpad_down", label: "D-Pad Down" },
+    { data: "dpad_left", label: "D-Pad Left" },
+    { data: "dpad_right", label: "D-Pad Right" },
+    { data: "other", label: "Other buttons" },
+];
+const DEFAULT_FLASH_COLOR = "FFFFFF";
+function aliasMode(mode) {
+    return mode === "battery-breathing" ? "breathing" : mode;
+}
+const PARAM_UI = {
+    speed: {
+        label: "Speed",
+        min: 25,
+        max: 300,
+        step: 25,
+        modes: new Set(["breathing", "chase", "rainbow", "alternating", "multidot", "ambilight"]),
+        toBackend: (v) => v / 100,
+        fromBackend: (v) => Math.round(v * 100),
+    },
+    intensity: {
+        label: "Intensity (min brightness)",
+        min: 0,
+        max: 50,
+        step: 5,
+        modes: new Set(["breathing", "alternating", "chase", "multidot", "reactive"]),
+        toBackend: (v) => v / 100,
+        fromBackend: (v) => Math.round(v * 100),
+    },
+    size: {
+        label: "Size",
+        min: 1,
+        max: 3,
+        step: 1,
+        modes: new Set(["chase", "multidot"]),
+        toBackend: (v) => v,
+        fromBackend: (v) => v,
+    },
+};
+const PARAM_DEFAULTS = { speed: 1.0, intensity: 0.15, size: 2 };
+function Lighting({ config, setConfig }) {
+    const [colorsExpanded, setColorsExpanded] = SP_REACT.useState(false);
+    const [flashExpanded, setFlashExpanded] = SP_REACT.useState(false);
+    const [flashButton, setFlashButton] = SP_REACT.useState("south");
+    const stickLed = config.stickLed;
+    const mode = stickLed?.mode || "static";
+    if (!stickLed?.supported) {
+        return (SP_JSX.jsx(DFL.PanelSection, { title: "Stick Lighting", children: SP_JSX.jsx(DFL.Field, { label: "No addressable stick RGB hardware detected on this board." }) }));
+    }
+    const setStickLedMode$1 = async (nextMode) => {
+        const previous = stickLed.mode;
+        setConfig((current) => (current ? { ...current, stickLed: { ...current.stickLed, mode: nextMode } } : current));
+        try {
+            const applied = await setStickLedMode(nextMode);
+            setConfig((current) => (current ? { ...current, stickLed: applied } : current));
+        }
+        catch (error) {
+            setConfig((current) => (current ? { ...current, stickLed: { ...current.stickLed, mode: previous } } : current));
+        }
+    };
+    const setStickLedScreenLink$1 = async (value) => {
+        const previous = stickLed.screenLink;
+        setConfig((current) => (current ? { ...current, stickLed: { ...current.stickLed, screenLink: value } } : current));
+        try {
+            const applied = await setStickLedScreenLink(value);
+            setConfig((current) => (current ? { ...current, stickLed: applied } : current));
+        }
+        catch (error) {
+            setConfig((current) => (current ? { ...current, stickLed: { ...current.stickLed, screenLink: previous } } : current));
+        }
+    };
+    const setStickLedColor$1 = async (hex) => {
+        const previous = stickLed.color;
+        setConfig((current) => (current ? { ...current, stickLed: { ...current.stickLed, mode: "static", color: hex } } : current));
+        try {
+            const applied = await setStickLedColor(hex);
+            setConfig((current) => (current ? { ...current, stickLed: applied } : current));
+        }
+        catch (error) {
+            setConfig((current) => (current ? { ...current, stickLed: { ...current.stickLed, color: previous } } : current));
+        }
+    };
+    const setStickLedChannel = (channel, value) => {
+        const rgb = hexToRgb(stickLed.color);
+        rgb[channel] = value;
+        void setStickLedColor$1(rgbToHex(rgb[0], rgb[1], rgb[2]));
+    };
+    const setStickLedFlashColor$1 = async (hex) => {
+        const previous = stickLed.flashColors[flashButton];
+        setConfig((current) => current
+            ? { ...current, stickLed: { ...current.stickLed, flashColors: { ...current.stickLed.flashColors, [flashButton]: hex } } }
+            : current);
+        try {
+            const applied = await setStickLedFlashColor(flashButton, hex);
+            setConfig((current) => (current ? { ...current, stickLed: applied } : current));
+        }
+        catch (error) {
+            setConfig((current) => current
+                ? { ...current, stickLed: { ...current.stickLed, flashColors: { ...current.stickLed.flashColors, [flashButton]: previous } } }
+                : current);
+        }
+    };
+    const setFlashChannel = (channel, value) => {
+        const rgb = hexToRgb(stickLed.flashColors[flashButton] ?? DEFAULT_FLASH_COLOR);
+        rgb[channel] = value;
+        void setStickLedFlashColor$1(rgbToHex(rgb[0], rgb[1], rgb[2]));
+    };
+    const setStickLedParam$1 = async (param, backendValue) => {
+        const effectiveMode = aliasMode(mode);
+        const key = `${param}_${effectiveMode}`;
+        const previous = stickLed.params[key];
+        setConfig((current) => current ? { ...current, stickLed: { ...current.stickLed, params: { ...current.stickLed.params, [key]: backendValue } } } : current);
+        try {
+            const applied = await setStickLedParam(param, effectiveMode, backendValue);
+            setConfig((current) => (current ? { ...current, stickLed: applied } : current));
+        }
+        catch (error) {
+            setConfig((current) => current ? { ...current, stickLed: { ...current.stickLed, params: { ...current.stickLed.params, [key]: previous } } } : current);
+        }
+    };
+    return (SP_JSX.jsxs(DFL.PanelSection, { title: "Stick Lighting", children: [SP_JSX.jsx(SelectEdit, { label: "Mode", value: mode, options: MODE_OPTIONS, onChange: setStickLedMode$1 }), Object.entries(PARAM_UI)
+                .filter(([, spec]) => spec.modes.has(aliasMode(mode)))
+                .map(([param, spec]) => {
+                const key = `${param}_${aliasMode(mode)}`;
+                const raw = stickLed.params[key] ?? PARAM_DEFAULTS[param];
+                return (SP_JSX.jsx(SliderEdit, { label: spec.label, value: spec.fromBackend(raw), min: spec.min, max: spec.max, step: spec.step, onChange: (value) => setStickLedParam$1(param, spec.toBackend(value)) }, param));
+            }), SP_JSX.jsx(ToggleRow, { label: "Follow screen brightness", description: "Dim the sticks along with the display backlight", value: !!stickLed.screenLink, onChange: setStickLedScreenLink$1 }), COLOR_VISIBLE_MODES.has(mode) && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setColorsExpanded((expanded) => !expanded), children: colorsExpanded ? "Hide colors ▲" : "Show colors ▼" }), colorsExpanded && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [PRESET_COLORS.map((preset) => (SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setStickLedColor$1(preset.value), children: preset.label }, preset.value))), SP_JSX.jsx(SliderEdit, { label: "Red", value: hexToRgb(stickLed.color)[0], min: 0, max: 255, step: 1, onChange: (value) => setStickLedChannel(0, value) }), SP_JSX.jsx(SliderEdit, { label: "Green", value: hexToRgb(stickLed.color)[1], min: 0, max: 255, step: 1, onChange: (value) => setStickLedChannel(1, value) }), SP_JSX.jsx(SliderEdit, { label: "Blue", value: hexToRgb(stickLed.color)[2], min: 0, max: 255, step: 1, onChange: (value) => setStickLedChannel(2, value) })] }))] })), mode === "reactive" && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setFlashExpanded((expanded) => !expanded), children: flashExpanded ? "Hide flash colors ▲" : "Show flash colors ▼" }), flashExpanded && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(SelectEdit, { label: "Button", value: flashButton, options: FLASH_BUTTON_OPTIONS, onChange: setFlashButton }), PRESET_COLORS.map((preset) => (SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setStickLedFlashColor$1(preset.value), children: preset.label }, preset.value))), SP_JSX.jsx(SliderEdit, { label: "Red", value: hexToRgb(stickLed.flashColors[flashButton] ?? DEFAULT_FLASH_COLOR)[0], min: 0, max: 255, step: 1, onChange: (value) => setFlashChannel(0, value) }), SP_JSX.jsx(SliderEdit, { label: "Green", value: hexToRgb(stickLed.flashColors[flashButton] ?? DEFAULT_FLASH_COLOR)[1], min: 0, max: 255, step: 1, onChange: (value) => setFlashChannel(1, value) }), SP_JSX.jsx(SliderEdit, { label: "Blue", value: hexToRgb(stickLed.flashColors[flashButton] ?? DEFAULT_FLASH_COLOR)[2], min: 0, max: 255, step: 1, onChange: (value) => setFlashChannel(2, value) })] }))] }))] }));
 }
 
 const fanOptions = [
@@ -649,6 +839,9 @@ function Content() {
     return (SP_JSX.jsxs("div", { className: "pocknix-control-tabs", children: [SP_JSX.jsx("style", { children: styles }), SP_JSX.jsx(DFL.Tabs, { activeTab: tab, onShowTab: setTab, tabs: [
                     { id: "Games", title: tabIcons.Games, content: tabContent(SP_JSX.jsx(Games, { config: config, setConfig: setConfig })) },
                     { id: "Power", title: tabIcons.Power, content: tabContent(SP_JSX.jsx(Power, { config: config, setConfig: setConfig, reload: load })) },
+                    ...(config.stickLed?.supported
+                        ? [{ id: "Lighting", title: tabIcons.Lighting, content: tabContent(SP_JSX.jsx(Lighting, { config: config, setConfig: setConfig })) }]
+                        : []),
                     { id: "Storage", title: tabIcons.Storage, content: tabContent(SP_JSX.jsx(Storage, {})) },
                     { id: "Updater", title: tabIcons.Updater, content: tabContent(SP_JSX.jsx(Updater, {})) },
                 ] })] }));
