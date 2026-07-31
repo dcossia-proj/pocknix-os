@@ -6,7 +6,8 @@
 # (/usr/share/steam/compatibilitytools.d/proton-cachyos) with a CONSTANT internal name in
 # compatibilitytool.vdf; Steam stores that internal name in config.vdf per-game selections,
 # so a `pacman -Syu` bump swaps the files underneath and every game already set to it keeps
-# working. Only the display_name (dropdown label) carries the version.
+# working. The dropdown label carries only the MAJOR version — the entry is a pointer to
+# whatever we currently ship, so the date would just go stale in the UI.
 #
 # Two fixes applied over the raw tarball (both proven on the Valve ARM tool + armada):
 #   * toolmanifest.vdf: ours, WITHOUT require_tool_appid — the tarball's manifest requires a
@@ -23,8 +24,9 @@
 # reset pkgrel=1, refresh sha512sums (upstream publishes .sha512sum next to each tarball).
 # Kernel note: CONFIG_NTSYNC=y on both SoCs already, wine's ntsync fast path just works.
 pkgname=proton-cachyos
-_srctag=11.0-20260702
+_srctag=11.0-20260703
 _build=slr
+_major=${_srctag%%.*}
 pkgver=${_srctag//-/.}
 pkgrel=1
 pkgdesc="CachyOS Proton (official ARM64 build) as a system Steam compatibility tool"
@@ -40,14 +42,13 @@ source=("https://github.com/CachyOS/proton-cachyos/releases/download/cachyos-${_
         'compatibilitytool.vdf.in'
         'toolmanifest.vdf'
         'pocknix-proton')
-sha512sums=('07060c374dd24eb19fd184cd7b170bb79551a4039a76a2f6ab2cf4888bfd9ae3c32fb4a642cb24e62d03f9090bd5f2c07dc5cf882d6ef1981b755603e08bf69a'
+sha512sums=('54514fc117f2f74cfbc8e9a321a0432513fd44d875ce1c0c48c72af0518d683f3d16ff755d213c0fb42d6e8a1db2a290e9ab883e3505baccc4f43e5e9e692a09'
             'SKIP'
             'SKIP'
             'SKIP')
 
 build() {
-  # Constant internal name lives in the template; only the display label gets the version.
-  sed "s|@VER@|${_srctag}|" compatibilitytool.vdf.in > compatibilitytool.vdf
+  sed "s|@VER@|${_major}|" compatibilitytool.vdf.in > compatibilitytool.vdf
 }
 
 package() {

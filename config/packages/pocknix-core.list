@@ -14,6 +14,7 @@ pocknix-sdcard-automount
 mangohud               # patched (Adreno sysfs reader + mangoapp pacing)
 pocknix-steam          # the Steam session (launcher + installer)
 proton-cachyos         # CachyOS ARM64 Proton as a system compat tool (constant Steam entry, updates via pacman)
+proton-ge              # GE-Proton ARM64, second compat tool (x86 builds of both stay repo-only)
 fex-emu                # x86 emulator (thunks)
 fex-rootfs             # ~1.1 GB Arch x86 squashfs the games' libraries resolve from
 pocknix-desktop        # Plasma Mobile session + game<->desktop switch

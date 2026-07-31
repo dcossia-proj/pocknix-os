@@ -136,12 +136,14 @@ including how to uninstall and restore the space to Android.
 
 ## How to play games
 
-Download a game and play - **proton-cachyos ARM64 ships as the default compatibility tool**,
-so no setup is needed.
+Download a game, then **set a compatibility tool for it**: open the game's
+**Properties → Compatibility**, tick **"Force the use of a specific Steam Play compatibility
+tool"** and pick **Proton-CachyOS 11 (ARM64)**, which ships with pocknix. This is a per game
+setting, so repeat it for each title you install.
 
-That said, it is worth trying **Proton 11 ARM** too: it is more bleeding edge and may offer
+It is also worth trying **Proton 11 ARM** too: it is more bleeding edge and may offer
 better compatibility for some titles. Search for **"Proton 11 ARM"** in your Steam **Library**,
-download and install it, then force it per game under **Properties → Compatibility**.
+download and install it, then force it per game the same way.
 
 x86 games run through FEX (x86-on-ARM translation) plus Proton, so many Windows titles "just work". Generally, performance should match or exceed PC emulation under Android through apps like Gamehub/Game Native. Compatibility (the amount of games that boot at all) is likely a little worse, but trust in Gabe - Valve and their contractors are working on it and things are improving rapidly. 
 

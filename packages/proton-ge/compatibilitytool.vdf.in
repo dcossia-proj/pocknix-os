@@ -1,0 +1,15 @@
+// proton-ge: registers the GE-Proton ARM64 build as a selectable compat tool.
+// The internal name never changes, so bumps keep per-game selections working.
+"compatibilitytools"
+{
+  "compat_tools"
+  {
+    "proton-ge"
+    {
+      "install_path" "."
+      "display_name" "Proton-GE @VER@ (ARM64)"
+      "from_oslist"  "windows"
+      "to_oslist"    "linux"
+    }
+  }
+}
