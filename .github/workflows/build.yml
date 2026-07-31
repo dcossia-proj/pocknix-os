@@ -72,10 +72,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             libarchive-tools curl rsync flex bison bc python3 git \
-            build-essential xz-utils dwarves \
+            build-essential xz-utils dwarves libelf-dev libssl-dev zlib1g-dev \
             parted gdisk dosfstools btrfs-progs zstd
           # dwarves -> pahole (kernel BTF); gdisk -> sgdisk; dosfstools -> mkfs.vfat;
-          # btrfs-progs -> mkfs.btrfs/btrfs. Exact set scripts/*.sh's need_tool calls check for.
+          # btrfs-progs -> mkfs.btrfs/btrfs — the set scripts/*.sh's need_tool calls check for.
+          # libelf-dev/libssl-dev/zlib1g-dev aren't need_tool'd (they're headers, not
+          # binaries) but CONFIG_DEBUG_INFO_BTF=y pulls in tools/bpf/resolve_btfids,
+          # which needs libelf.h to link — first full-build run failed here with
+          # "libbpf.c:46:10: fatal error: libelf.h: No such file or directory".
+          # libssl-dev/zlib1g-dev are the standard kernel.org-recommended companions
+          # (module signing, BTF/module compression) — added preemptively so a second
+          # missing-header run doesn't cost another hour of kernel compile to discover.
       - name: Trust the checkout under sudo (root's git has no idea who owns it otherwise)
         run: sudo git config --global --add safe.directory "${GITHUB_WORKSPACE}"
       - name: Bootstrap + kernel + packages + rootfs + SD image
