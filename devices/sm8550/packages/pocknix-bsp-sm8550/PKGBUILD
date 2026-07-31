@@ -22,6 +22,11 @@
 #     while gaming, hold = blank/unblank the bottom panel
 #   * pocknix-hud-bottom(.service), mangohud-bottom.conf — the bottom-screen
 #     performance HUD itself
+#   * 003-dual-screen-sleep-post — pocknix-sleep hook: reassert the bottom
+#     panel's blanked/unblanked state after suspend/resume (a DRM resume
+#     re-probes outputs, which would otherwise silently undo an AYN-button
+#     blank). No pre hook needed — the kernel's own panel PM ops already
+#     handle suspend; only the resume side needs reconciling.
 #
 # Hardware-gated (not board-gated) at runtime by ConditionPathExists=/sys/
 # class/leds/l:r1 — currently RP6 and Thor:
@@ -34,7 +39,7 @@
 #     before suspend, restart after resume (see pocknix-bsp-common).
 pkgname=pocknix-bsp-sm8550
 pkgver=0.3.0
-pkgrel=1
+pkgrel=2
 pkgdesc="pocknix board support: SM8550 family (RP6, Odin 2 family, Thor) — runtime board dispatch, input map, suspend quirks, audio UCM, dual-screen"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
@@ -61,10 +66,11 @@ source=('device.conf'
         'pocknix-ayn-button' 'pocknix-ayn-button.service'
         'pocknix-hud-bottom' 'pocknix-hud-bottom.service' 'mangohud-bottom.conf'
         'stick-led-color' 'pocknix-stick-led.service'
-        '002-stick-led-sleep-pre' '002-stick-led-sleep-post')
+        '002-stick-led-sleep-pre' '002-stick-led-sleep-post'
+        '003-dual-screen-sleep-post')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
             'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
-            'SKIP' 'SKIP' 'SKIP' 'SKIP')
+            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   # Runtime device facts: the model dispatcher + per-board files. boards/ is
@@ -131,4 +137,9 @@ package() {
     "${pkgdir}/usr/lib/pocknix/sleep.d/pre/002-stick-led"
   install -Dm755 "${srcdir}/002-stick-led-sleep-post" \
     "${pkgdir}/usr/lib/pocknix/sleep.d/post/002-stick-led"
+
+  # Dual-screen suspend/resume reconciliation (Thor-only at runtime — see
+  # the header; needs runuser (util-linux) and pgrep (procps), both base).
+  install -Dm755 "${srcdir}/003-dual-screen-sleep-post" \
+    "${pkgdir}/usr/lib/pocknix/sleep.d/post/003-dual-screen"
 }

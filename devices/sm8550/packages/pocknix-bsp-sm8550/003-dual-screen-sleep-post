@@ -1,0 +1,73 @@
+#!/bin/sh
+# pocknix-sleep post hook: restore the bottom panel's KScreen state after a
+# real system suspend/resume cycle (dual-screen boards only - no-op via the
+# POCKNIX_SECONDARY_CONNECTOR gate below on every other board).
+#
+# No pre hook: the kernel's own DRM/panel PM ops physically suspend/resume
+# the panel as part of a real ACPI/system suspend regardless of KScreen's
+# logical enabled state, so there's nothing to do before suspending. What
+# needs fixing is only on the way BACK: a DRM resume re-probes connected
+# outputs, which is expected to bring the panel back logically enabled
+# whether or not the user had it enabled before suspending.
+#
+# Two cases:
+#   - it was manually blanked (AYN-button long-press, see pocknix-ayn-button)
+#     before suspending: re-assert the disable + touch inhibit, so a
+#     suspend/resume cycle doesn't silently undo the user's choice.
+#   - it wasn't blanked: re-run pocknix-setup-dual-screen as a fallback -
+#     same belt-and-braces reasoning bottom-screen-toggle's own re-enable
+#     path already uses (KScreen's per-output profile is EXPECTED to
+#     restore position/scale/rotation on its own; this covers it if not).
+#
+# Runs as root (systemd system-sleep hooks always do); the desktop session
+# lives in the 'deck' user's own D-Bus session bus, so this bridges into it
+# explicitly (runuser, same UID=1001 assumption pocknix-desktop's own
+# comments already make). UNVERIFIED ON HARDWARE - the biggest unknown is
+# whether KWin/KScreen come back up in time for the kwin_wayland check
+# below to see them; widen the poll if resume timing is worse in practice.
+
+[ -r /usr/lib/pocknix/device.conf ] && . /usr/lib/pocknix/device.conf
+[ -r /etc/pocknix/device.conf ] && . /etc/pocknix/device.conf
+[ -n "${POCKNIX_SECONDARY_CONNECTOR}" ] || exit 0
+
+# Only meaningful in the Plasma Mobile desktop session - gamescope/Steam
+# doesn't run KWin/KScreen at all. Bail immediately rather than paying the
+# poll below (which blocks systemd-suspend's resume path) on every resume
+# regardless of which session was active.
+pgrep -u deck -x kwin_wayland >/dev/null 2>&1 || exit 0
+
+DECK_RUNTIME=/run/user/1001
+DECK_BUS="unix:path=${DECK_RUNTIME}/bus"
+STATE_FILE="${DECK_RUNTIME}/pocknix-bottom-screen-blanked"
+
+as_deck() {
+  runuser -u deck -- env XDG_RUNTIME_DIR="${DECK_RUNTIME}" DBUS_SESSION_BUS_ADDRESS="${DECK_BUS}" "$@"
+}
+
+# kscreen kded can take a moment after resume to be reachable over D-Bus
+# again (same shape as pocknix-desktop-rotate's own post-login poll).
+i=0
+while ! as_deck kscreen-doctor -o >/dev/null 2>&1; do
+  i=$((i + 1))
+  [ "${i}" -ge 30 ] && exit 0
+  sleep 0.5
+done
+
+if [ -e "${STATE_FILE}" ]; then
+  as_deck kscreen-doctor "output.${POCKNIX_SECONDARY_CONNECTOR}.disable"
+  [ -n "${POCKNIX_SECONDARY_TOUCHSCREEN}" ] || exit 0
+  # Best-effort re-inhibit via the same sysfs 'inhibited' attribute
+  # pocknix-ayn-button uses (kernel >= 6.11); silent no-op if absent.
+  for input in /sys/class/input/input*; do
+    [ "$(cat "${input}/name" 2>/dev/null)" = "${POCKNIX_SECONDARY_TOUCHSCREEN}" ] || continue
+    for ev in "${input}"/event*; do
+      [ -e "${ev}" ] || continue
+      evname=$(basename "${ev}")
+      [ -w "/sys/class/input/${evname}/inhibited" ] && echo 1 > "/sys/class/input/${evname}/inhibited"
+      break
+    done
+    break
+  done
+else
+  as_deck /usr/bin/pocknix-setup-dual-screen
+fi
