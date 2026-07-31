@@ -1,4 +1,4 @@
-# CI: fast checks on every push/PR; the heavy package/kernel build is manual
+# CI: fast checks on every push/PR; the heavy package/kernel/image build is manual
 # (workflow_dispatch) until it has had a supervised first run — the full build
 # needs an ALARM chroot + loop devices + ~1h of kernel compile, all of which the
 # aarch64 ubuntu-24.04-arm hosted runners CAN do, but which is wasteful to run
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       full_build:
-        description: "Run the full packages+kernel build (aarch64, ~1-2h)"
+        description: "Run the full kernel+packages+image build (aarch64, ~2-3h) and upload a flashable SD image"
         type: boolean
         default: false
 
@@ -55,21 +55,59 @@ jobs:
 
   full-build:
     # aarch64 hosted runner: native chroot + makepkg + kernel build, no qemu.
-    # First runs will need iteration (chroot bootstrap inside the runner) — treat
-    # this job as scaffolding to be hardened on its first supervised run.
+    # Unlike armada (a bootc/OCI image, built via buildah + rechunked + pushed to
+    # ghcr, with disk-image assembly as a SEPARATE workflow driven off the
+    # published container), pocknix has no intermediate container: it's one
+    # sequential pipeline (ALARM chroot -> local pacman repo -> rootfs -> raw disk
+    # image), so it's one job here rather than two workflows. First runs will need
+    # iteration (chroot bootstrap inside the runner) — treat this job as
+    # scaffolding to be hardened on its first supervised run.
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_build }}
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 300
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - name: Host deps (the build bootstraps its own ALARM chroot)
-        run: sudo apt-get install -y -qq libarchive-tools curl rsync flex bison bc python3 git
-      - name: Bootstrap + packages + kernel
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libarchive-tools curl rsync flex bison bc python3 git \
+            build-essential xz-utils dwarves \
+            parted gdisk dosfstools btrfs-progs zstd
+          # dwarves -> pahole (kernel BTF); gdisk -> sgdisk; dosfstools -> mkfs.vfat;
+          # btrfs-progs -> mkfs.btrfs/btrfs. Exact set scripts/*.sh's need_tool calls check for.
+      - name: Trust the checkout under sudo (root's git has no idea who owns it otherwise)
+        run: sudo git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+      - name: Bootstrap + kernel + packages + rootfs + SD image
         run: |
           sudo make bootstrap
           sudo make kernel
           sudo make packages
+          sudo make build
+          sudo make sd-image
+      - name: Compress + checksum the SD image
+        run: |
+          set -euxo pipefail
+          IMG="build/image/sm8550/pocknix-sm8550-sd.img"
+          [ -f "${IMG}" ] || { echo "::error::no ${IMG} — sd-image step didn't produce it"; exit 1; }
+          sudo chown "$(id -u):$(id -g)" "${IMG}"
+          # Same convention as scripts/publish-image.sh (zstd -12), skipping its
+          # rclone-upload half — that needs the maintainer's own bucket credentials,
+          # not something a CI run on a fork should attempt.
+          zstd -T0 -12 "${IMG}" -o "${IMG}.zst"
+          ( cd "$(dirname "${IMG}")" && sha256sum "$(basename "${IMG}.zst")" > "$(basename "${IMG}.zst.sha256")" )
+      - name: Upload SD image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocknix-sm8550-sd-image
+          path: |
+            build/image/sm8550/pocknix-sm8550-sd.img.zst
+            build/image/sm8550/pocknix-sm8550-sd.img.zst.sha256
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
       - name: Upload localrepo as artifact (unsigned — sign locally with make publish)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: localrepo
