@@ -33,7 +33,8 @@ license=('GPL2')
 # present degrades gracefully instead of erroring.
 depends=('bash')
 source=('pocknix-roms-init' 'pocknix-roms-init.service' 'pocknix-steam-sync' 'pocknix-play'
-        'es-eden' 'es-armsx2' 'es-dolphin' 'es-psp'
+        'es-eden' 'es-armsx2' 'es-dolphin' 'es-psp' 'es-xemu'
+        'es-azahar' 'es-rpcs3' 'es-cemu' 'es-vita3k'
         'es_find_rules.xml' 'es_systems.xml' 'retroarch.cfg' 'ROMS-README.txt' 'armsx2-PCSX2.ini.in'
         'eden-qt-config.ini.in' 'ppsspp.ini.in'
         'dolphin-Dolphin.ini.in' 'dolphin-GFX.ini.in' 'dolphin-GCPadNew.ini.in'
@@ -43,7 +44,7 @@ source=('pocknix-roms-init' 'pocknix-roms-init.service' 'pocknix-steam-sync' 'po
         # build directory", 2026-07-08); package() maps retroarch-<Core>-<file> into the
         # retroarch-config/<Core>/ tree that pocknix-roms-init seeds from.
         'retroarch-mGBA-gba.cfg' 'retroarch-mGBA-gba.slangp')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 "${srcdir}/pocknix-roms-init" "${pkgdir}/usr/bin/pocknix-roms-init"
@@ -59,6 +60,11 @@ package() {
   install -Dm755 "${srcdir}/es-eden"    "${pkgdir}/usr/lib/pocknix/es-eden"
   install -Dm755 "${srcdir}/es-armsx2"  "${pkgdir}/usr/lib/pocknix/es-armsx2"
   install -Dm755 "${srcdir}/es-psp"     "${pkgdir}/usr/lib/pocknix/es-psp"
+  install -Dm755 "${srcdir}/es-xemu"    "${pkgdir}/usr/lib/pocknix/es-xemu"
+  install -Dm755 "${srcdir}/es-azahar"  "${pkgdir}/usr/lib/pocknix/es-azahar"
+  install -Dm755 "${srcdir}/es-rpcs3"   "${pkgdir}/usr/lib/pocknix/es-rpcs3"
+  install -Dm755 "${srcdir}/es-cemu"    "${pkgdir}/usr/lib/pocknix/es-cemu"
+  install -Dm755 "${srcdir}/es-vita3k"  "${pkgdir}/usr/lib/pocknix/es-vita3k"
   install -Dm755 "${srcdir}/es-dolphin" "${pkgdir}/usr/lib/pocknix/es-dolphin"
 
   # --user oneshot: runs pocknix-roms-init on the deck login (create tree + seed configs). Enabled

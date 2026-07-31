@@ -55,4 +55,54 @@
         <platform>psp</platform>
         <theme>psp</theme>
     </system>
+    <system>
+        <name>xbox</name>
+        <fullname>Microsoft Xbox</fullname>
+        <path>%ROMPATH%/xbox</path>
+        <extension>.iso .ISO</extension>
+        <command label="xemu">/usr/lib/pocknix/es-xemu -dvd_path %ROM%</command>
+        <command label="Shortcut or script">%ENABLESHORTCUTS% %EMULATOR_OS-SHELL% %ROM%</command>
+        <platform>xbox</platform>
+        <theme>xbox</theme>
+    </system>
+    <system>
+        <name>n3ds</name>
+        <fullname>Nintendo 3DS</fullname>
+        <path>%ROMPATH%/n3ds</path>
+        <extension>.3ds .3DS .3dsx .3DSX .app .APP .axf .AXF .cci .CCI .cxi .CXI .elf .ELF</extension>
+        <command label="Azahar">/usr/lib/pocknix/es-azahar %ROM%</command>
+        <command label="Shortcut or script">%ENABLESHORTCUTS% %EMULATOR_OS-SHELL% %ROM%</command>
+        <platform>n3ds</platform>
+        <theme>n3ds</theme>
+    </system>
+    <system>
+        <name>ps3</name>
+        <fullname>Sony PlayStation 3</fullname>
+        <path>%ROMPATH%/ps3</path>
+        <extension>.ps3 .PS3 .ps3dir .PS3DIR .bin .BIN .elf .ELF .self .SELF</extension>
+        <command label="RPCS3">/usr/lib/pocknix/es-rpcs3 --no-gui %ROM%</command>
+        <command label="Shortcut or script">%ENABLESHORTCUTS% %EMULATOR_OS-SHELL% %ROM%</command>
+        <platform>ps3</platform>
+        <theme>ps3</theme>
+    </system>
+    <system>
+        <name>wiiu</name>
+        <fullname>Nintendo Wii U</fullname>
+        <path>%ROMPATH%/wiiu</path>
+        <extension>.rpx .RPX .wua .WUA .wud .WUD .wux .WUX</extension>
+        <command label="Cemu">/usr/lib/pocknix/es-cemu -f -g %ROM%</command>
+        <command label="Shortcut or script">%ENABLESHORTCUTS% %EMULATOR_OS-SHELL% %ROM%</command>
+        <platform>wiiu</platform>
+        <theme>wiiu</theme>
+    </system>
+    <system>
+        <name>psvita</name>
+        <fullname>Sony PlayStation Vita</fullname>
+        <path>%ROMPATH%/psvita</path>
+        <extension>.psvita .PSVITA</extension>
+        <command label="Vita3K">/usr/lib/pocknix/es-vita3k -r %BASENAME%</command>
+        <command label="Shortcut or script">%ENABLESHORTCUTS% %EMULATOR_OS-SHELL% %ROM%</command>
+        <platform>psvita</platform>
+        <theme>psvita</theme>
+    </system>
 </systemList>
