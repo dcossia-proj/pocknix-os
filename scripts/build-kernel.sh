@@ -289,12 +289,28 @@ build_kernel() {
   kmake -j"${JOBS}" Image dtbs modules
 }
 
+# `make dtbs` builds ~400 upstream boards; shipping them all adds ~43 MB to the
+# boot image and floods the ABL's device model menu with unrelated phones (it
+# lists every appended dtb carrying qcom,msm-id). Keep only this SoC's boards.
+stage_dtbs() {
+  local dts name src n=0
+  for dts in "${KERNEL_DIR}"/dts/*/*.dts; do
+    [ -f "${dts}" ] || continue
+    name="$(basename "${dts}" .dts)"
+    src="$(find "${KSRC}/arch/arm64/boot/dts" -name "${name}.dtb" -print -quit)"
+    [ -n "${src}" ] || die "dtb not built for shipped board ${name}.dts — is it registered in the qcom Makefile? (install_dts)"
+    cp "${src}" "${KBUILD}/out/dtbs/"
+    n=$((n+1))
+  done
+  [ "${n}" -gt 0 ] || die "no dtbs staged — ${KERNEL_DIR}/dts ships no .dts files?"
+}
+
 stage() {
   log "staging artifacts -> ${KBUILD}/out"
   rm -rf "${KBUILD}/out"
   mkdir -p "${KBUILD}/out/dtbs"
   cp "${KSRC}/arch/arm64/boot/Image" "${KBUILD}/out/Image"
-  find "${KSRC}/arch/arm64/boot/dts" -name '*.dtb' -exec cp {} "${KBUILD}/out/dtbs/" \;
+  stage_dtbs
   kmake INSTALL_MOD_PATH="${KBUILD}/out/modroot" modules_install >/dev/null
   rm -f "${KBUILD}/out/modroot"/lib/modules/*/build "${KBUILD}/out/modroot"/lib/modules/*/source
   kmake -s kernelrelease > "${KBUILD}/out/kernelrelease"

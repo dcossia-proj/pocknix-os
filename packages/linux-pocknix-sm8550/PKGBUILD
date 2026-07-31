@@ -1,6 +1,7 @@
 # linux-pocknix-sm8550 — the SM8550 kernel as a pacman package. Per-SoC, not
-# per-device: the boot image and /boot/dtbs carry EVERY board's dtb from
-# kernel/sm8550/dts (the qcom ABL selects by board id), so this one package
+# per-device: the boot image and /boot/dtbs carry the boards from
+# kernel/sm8550/dts and only those (the ABL's device model menu lists every dtb
+# it finds — see stage_dtbs in build-kernel.sh), so this one package
 # serves the RP6, AYN Odin 2, Thor, ... A new SoC gets a sibling copy of this
 # thin dir (linux-pocknix-<soc>). Successor to the old 'linux-pocknix'.
 #
@@ -19,8 +20,8 @@
 # (quirk params), owned by each device's BSP (e.g. pocknix-bsp-rp6).
 pkgname=linux-pocknix-sm8550
 pkgver=7.1.2
-pkgrel=9
-pkgdesc="SM8550 kernel (stock ${pkgver} + ROCKNIX patch stack, all-boards dtbs) — packaged from 'make kernel' output"
+pkgrel=10
+pkgdesc="SM8550 kernel (stock ${pkgver} + ROCKNIX patch stack, SoC board dtbs) — packaged from 'make kernel' output"
 arch=('aarch64')
 url="https://github.com/shuuri-labs/pocknix-os"
 license=('GPL-2.0-only')
