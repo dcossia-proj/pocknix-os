@@ -1,0 +1,7 @@
+#!/bin/bash
+# ES-DE launch wrapper for standalone PPSSPP (PSP): big-core taskset pin, mirroring
+# es-armsx2. Same rationale: ES-DE launches bypass pocknix-play, and unpinned the
+# GPU/render threads can land on a little core -> chop.
+[ -r /usr/lib/pocknix/device.conf ] && . /usr/lib/pocknix/device.conf
+[ -r /etc/pocknix/device.conf ] && . /etc/pocknix/device.conf
+exec taskset -c "${POCKNIX_BIG_CORES:-3-7}" /usr/bin/PPSSPPSDL "$@"

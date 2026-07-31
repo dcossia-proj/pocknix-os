@@ -1,0 +1,6 @@
+#!/bin/bash
+# ES-DE launch wrapper for vita3k: big-core taskset pin, mirroring es-armsx2.
+# AppImage emulators also need this as their bridge into ES-DE (not in PATH).
+[ -r /usr/lib/pocknix/device.conf ] && . /usr/lib/pocknix/device.conf
+[ -r /etc/pocknix/device.conf ] && . /etc/pocknix/device.conf
+exec taskset -c "${POCKNIX_BIG_CORES:-3-7}" /opt/pocknix/emulators/vita3k/Vita3K.AppImage "$@"
