@@ -10,11 +10,18 @@
 # the emulator *-bin packages. Custom find rules in ~/ES-DE/custom_systems (seeded by
 # pocknix-roms-init) still apply on top of the AppImage's bundled config.
 #
-# The GitLab asset URL is a pinned package_files id (opaque but immutable) — from the v3.4.1
-# release's "ES-DE_aarch64.AppImage" link. Bump: check the release page for the new id.
+# The GitLab asset URL is a pinned package_files id — NOT actually immutable in practice: the
+# original id (288156935, still the current release/v3.4.1) started 404ing at some point (GitLab
+# re-uploads/regenerates package_files entries under a new id even without a version bump), caught
+# by the 2026-07-31 CI full-build run. Re-pinned to the id GitLab's releases API currently reports
+# for the same "ES-DE_aarch64.AppImage" asset:
+#   curl -s "https://gitlab.com/api/v4/projects/es-de%2Femulationstation-de/releases/v3.4.1" \
+#     | jq -r '.assets.links[] | select(.name=="ES-DE_aarch64.AppImage") | .direct_asset_url'
+# Bump: re-run that if this 404s again — check the id, not just the release page (which doesn't
+# surface the id churn).
 pkgname=es-de
 pkgver=3.4.1
-pkgrel=2
+pkgrel=3
 pkgdesc="ES-DE frontend for browsing and launching games (official aarch64 AppImage)"
 arch=('aarch64')
 url="https://es-de.org"
@@ -23,7 +30,7 @@ provides=('emulationstation-de')
 conflicts=('emulationstation-de')
 depends=('fuse2')
 options=('!strip')
-source=("ES-DE-${pkgver}.AppImage::https://gitlab.com/es-de/emulationstation-de/-/package_files/288156935/download"
+source=("ES-DE-${pkgver}.AppImage::https://gitlab.com/es-de/emulationstation-de/-/package_files/326321114/download"
         'es-de-wrapper'
         'es-de.desktop')
 sha256sums=('SKIP' 'SKIP' 'SKIP')
