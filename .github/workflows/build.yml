@@ -97,12 +97,19 @@ jobs:
           set -euxo pipefail
           IMG="build/image/sm8550/pocknix-sm8550-sd.img"
           [ -f "${IMG}" ] || { echo "::error::no ${IMG} — sd-image step didn't produce it"; exit 1; }
-          sudo chown "$(id -u):$(id -g)" "${IMG}"
+          # build/image/sm8550/ is root-owned (created under sudo make sd-image);
+          # chowning just the .img (as the first attempt did) still leaves the
+          # unprivileged runner unable to CREATE the new .zst file in that
+          # directory — "Permission denied" on the 2026-08-01 CI run. Run the
+          # compression itself under sudo instead, and only chown the two small
+          # output files afterward (upload-artifact runs unprivileged).
+          #
           # Same convention as scripts/publish-image.sh (zstd -12), skipping its
           # rclone-upload half — that needs the maintainer's own bucket credentials,
           # not something a CI run on a fork should attempt.
-          zstd -T0 -12 "${IMG}" -o "${IMG}.zst"
-          ( cd "$(dirname "${IMG}")" && sha256sum "$(basename "${IMG}.zst")" > "$(basename "${IMG}.zst.sha256")" )
+          sudo zstd -T0 -12 "${IMG}" -o "${IMG}.zst"
+          ( cd "$(dirname "${IMG}")" && sudo sha256sum "$(basename "${IMG}.zst")" > "$(basename "${IMG}.zst.sha256")" )
+          sudo chown "$(id -u):$(id -g)" "${IMG}.zst" "${IMG}.zst.sha256"
       - name: Upload SD image as artifact
         uses: actions/upload-artifact@v4
         with:
