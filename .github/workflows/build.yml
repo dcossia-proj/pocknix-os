@@ -108,7 +108,13 @@ jobs:
           # rclone-upload half — that needs the maintainer's own bucket credentials,
           # not something a CI run on a fork should attempt.
           sudo zstd -T0 -12 "${IMG}" -o "${IMG}.zst"
-          ( cd "$(dirname "${IMG}")" && sudo sha256sum "$(basename "${IMG}.zst")" > "$(basename "${IMG}.zst.sha256")" )
+          # `sudo cmd > file` doesn't work here: the > redirect is opened by the
+          # CALLING (unprivileged) shell before sudo ever runs, so it hits the
+          # same root-owned-directory wall — a second "Permission denied" on the
+          # same 2026-08-01 run, right after the zstd fix above. `sudo tee`
+          # instead does the write as root; the outer >/dev/null (unprivileged)
+          # only discards tee's own stdout echo, which /dev/null always allows.
+          ( cd "$(dirname "${IMG}")" && sudo sha256sum "$(basename "${IMG}.zst")" | sudo tee "$(basename "${IMG}.zst.sha256")" >/dev/null )
           sudo chown "$(id -u):$(id -g)" "${IMG}.zst" "${IMG}.zst.sha256"
       - name: Upload SD image as artifact
         uses: actions/upload-artifact@v4
@@ -128,7 +134,13 @@ jobs:
           # rocknix.4286887-3-aarch64.pkg.tar.xz), which actions/upload-artifact
           # rejects when uploading files directly — hit on the 2026-07-31 CI run.
           # One archive sidesteps the per-file path restriction entirely.
-          [ -d build/localrepo ] && sudo tar -C build -cf build/localrepo.tar localrepo || true
+          if [ -d build/localrepo ]; then
+            sudo tar -C build -cf build/localrepo.tar localrepo
+            # sudo tar creates it root-owned; upload-artifact runs unprivileged
+            # (same fix as the SD image's compress step above — untested until
+            # now since every prior run failed before reaching this step).
+            sudo chown "$(id -u):$(id -g)" build/localrepo.tar
+          fi
       - name: Upload localrepo as artifact (unsigned — sign locally with make publish)
         if: always()
         uses: actions/upload-artifact@v4
