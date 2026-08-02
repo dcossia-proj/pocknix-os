@@ -1,10 +1,10 @@
 # pocknix-bsp-sm8550 — board support for the SM8550 FAMILY: Retroid Pocket 6
-# (+TOP-DPAD), AYN Odin 2 / Mini / Portal. ONE package serves every board on
-# the SoC (same shape as pocknix-bsp-sm8250): runtime board facts live in
-# /usr/lib/pocknix/boards/<board>.conf, /usr/lib/pocknix/device.conf is a
-# sourced DISPATCHER picking one by devicetree model, and the InputPlumber
-# config is dt-model gated. Successor to the retired per-device BSPs
-# (pocknix-bsp-{rp6,odin2,odin2mini,odin2portal}), whose contents were
+# (+TOP-DPAD), AYN Odin 2 / Mini / Portal / Thor. ONE package serves every
+# board on the SoC (same shape as pocknix-bsp-sm8250): runtime board facts
+# live in /usr/lib/pocknix/boards/<board>.conf, /usr/lib/pocknix/device.conf
+# is a sourced DISPATCHER picking one by devicetree model, and the
+# InputPlumber config is dt-model gated. Successor to the retired per-device
+# BSPs (pocknix-bsp-{rp6,odin2,odin2mini,odin2portal}), whose contents were
 # identical apart from the board facts — 'replaces' migrates installed
 # devices on their next pacman -Syu.
 #
@@ -14,10 +14,17 @@
 #   * kernel-cmdline           — the family cmdline for the on-device /flash/KERNEL
 #                                rebuild (qcom-abl); build-packages.sh asserts it
 #                                matches devices/sm8550/profile.conf
+#
+# Thor-only, no-op on every other board (POCKNIX_SECONDARY_CONNECTOR unset):
+#   * pocknix-setup-dual-screen(.desktop) — one-time desktop-session layout for
+#     the bottom panel: positions the secondary output below the primary and
+#     pins each touchscreen to its own output. UNVERIFIED ON HARDWARE — first
+#     Thor bring-up attempt; the kernel/DTS side (mdss_dsi0, the ch13726a,thor
+#     panel driver) is already fully enabled upstream, nothing added there.
 pkgname=pocknix-bsp-sm8550
 pkgver=0.2.0
-pkgrel=1
-pkgdesc="pocknix board support: SM8550 family (RP6, Odin 2 family) — runtime board dispatch, input map, suspend quirks, audio UCM"
+pkgrel=2
+pkgdesc="pocknix board support: SM8550 family (RP6, Odin 2 family, Thor) — runtime board dispatch, input map, suspend quirks, audio UCM, dual-screen"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
 license=('GPL2')
@@ -37,8 +44,10 @@ source=('device.conf'
         '01-rsinput-controller.yaml' 'sm8550-gamepad.yaml'
         'AYN-Odin2.conf' 'HiFi.conf'
         '10-pocknix-deeponly.conf' '30-pocknix-cpuidle.conf'
-        'kernel-cmdline')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        'kernel-cmdline'
+        'pocknix-setup-dual-screen' 'pocknix-setup-dual-screen.desktop')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
+            'SKIP' 'SKIP')
 
 package() {
   # Runtime device facts: the model dispatcher + per-board files. boards/ is
@@ -80,4 +89,11 @@ package() {
   # shipped by linux-pocknix-sm8550). One family cmdline (the retired per-device ones
   # were byte-identical); build-packages.sh asserts it matches the family profile.
   install -Dm644 "${srcdir}/kernel-cmdline" "${pkgdir}/usr/lib/pocknix/kernel-cmdline"
+
+  # Dual-screen layout (Thor-only at runtime; reads POCKNIX_SECONDARY_CONNECTOR
+  # from device.conf and no-ops when it's unset, so installing on every board
+  # is safe).
+  install -Dm755 "${srcdir}/pocknix-setup-dual-screen" "${pkgdir}/usr/bin/pocknix-setup-dual-screen"
+  install -Dm644 "${srcdir}/pocknix-setup-dual-screen.desktop" \
+    "${pkgdir}/etc/xdg/autostart/pocknix-setup-dual-screen.desktop"
 }
