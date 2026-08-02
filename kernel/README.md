@@ -25,13 +25,19 @@ ROCKNIX work**, not ours:
   `jaewun/ROCKNIX` `thor-suspend-fixes`; we merge/maintain it.
 - **Our delta** (small) — TSENS uplow-wake broadening (`0203`), `CONFIG_PM_SLEEP_DEBUG`, and
   the SDAM breadcrumb debug hooks.
-- **AYN Thor touchscreen coordinate fix** (`dts/qcom/qcs8550-ayn-thor.dts`) — the synced ROCKNIX
-  DTS carries `touchscreen-swapped-x-y` + `touchscreen-inverted-x` on both `top_touchscreen` and
-  `bottom_touchscreen`, which produces mirrored/rotated touch coordinates on real hardware. Removed
-  on both nodes. Carried over from the same fix already validated on the `armada` distro's Thor
-  kernel (`armada-packages/kernel/dts/qcs8550-ayn-thor.dts.patch`). Re-verify after every `make
-  sync`: a future ROCKNIX nightly could reintroduce these properties or fix them upstream, either
-  of which would make this delta stale.
+- **AYN Thor touchscreen coordinate properties — REVERTED, under investigation.** The synced
+  ROCKNIX DTS carries `touchscreen-swapped-x-y` + `touchscreen-inverted-x` on both
+  `top_touchscreen` and `bottom_touchscreen`. `armada`'s Thor kernel patches these out
+  (`armada-packages/kernel/dts/qcs8550-ayn-thor.dts.patch`) to fix mirrored/rotated touch
+  coordinates there, and this tree carried the same removal for one round — but the first
+  real-hardware boot of this kernel produced a black screen on both panels (SD card detected fine
+  by the ABL; ROCKNIX and `armada` both boot this exact unit without issue). Reverted (properties
+  restored, matching the untouched synced state) as the first bisection step, since it's the only
+  kernel/DTS change in this tree that isn't already proven working elsewhere. Unconfirmed whether
+  it's actually the cause — touchscreen coordinate properties shouldn't affect panel bring-up at
+  all, so if a rebuild with this reverted *doesn't* fix the black screen, look elsewhere (dtbs_install/
+  boot-image assembly, board-id disambiguation among the family's 5 dtbs, or the panel driver
+  itself) before re-applying this fix.
 - **AYN Thor bottom panel** — `&mdss_dsi0`/`&mdss_dsi0_phy` already ship `status = "okay"` in the
   synced tree, i.e. the second screen is kernel-enabled as-is; no delta needed there. The RGB stick
   LEDs (`htr3212l`/`htr3212r`, `heroic,htr3212` driver, patch `0033`) are likewise already fully
